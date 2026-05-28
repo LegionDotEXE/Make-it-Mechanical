@@ -1,19 +1,18 @@
 using System;
 using UnityEngine;
-
+using UnityEngine.InputSystem;
 
 public class InputManager : MonoBehaviour
 {
     public static InputManager Instance { get; private set; }
 
-    [Header("Key Bindings")]
-    public KeyCode dodgeLeftKey  = KeyCode.A;
-    public KeyCode dodgeRightKey = KeyCode.D;
-    public KeyCode counterKey    = KeyCode.W;
-
     public event Action OnDodgeLeft;
     public event Action OnDodgeRight;
     public event Action OnCounter;
+
+    private InputAction dodgeLeftAction;
+    private InputAction dodgeRightAction;
+    private InputAction counterAction;
 
     void Awake()
     {
@@ -23,17 +22,35 @@ public class InputManager : MonoBehaviour
             return;
         }
         Instance = this;
+
+        // Create actions bound to the same keys as before (A, D, W)
+        dodgeLeftAction  = new InputAction("DodgeLeft",  InputActionType.Button, "<Keyboard>/a");
+        dodgeRightAction = new InputAction("DodgeRight", InputActionType.Button, "<Keyboard>/d");
+        counterAction    = new InputAction("Counter",    InputActionType.Button, "<Keyboard>/w");
+
+        dodgeLeftAction.performed  += ctx => OnDodgeLeft?.Invoke();
+        dodgeRightAction.performed += ctx => OnDodgeRight?.Invoke();
+        counterAction.performed    += ctx => OnCounter?.Invoke();
     }
 
-    void Update()
+    void OnEnable()
     {
-        if (Input.GetKeyDown(dodgeLeftKey))
-            OnDodgeLeft?.Invoke();
+        dodgeLeftAction?.Enable();
+        dodgeRightAction?.Enable();
+        counterAction?.Enable();
+    }
 
-        if (Input.GetKeyDown(dodgeRightKey))
-            OnDodgeRight?.Invoke();
+    void OnDisable()
+    {
+        dodgeLeftAction?.Disable();
+        dodgeRightAction?.Disable();
+        counterAction?.Disable();
+    }
 
-        if (Input.GetKeyDown(counterKey))
-            OnCounter?.Invoke();
+    void OnDestroy()
+    {
+        dodgeLeftAction?.Dispose();
+        dodgeRightAction?.Dispose();
+        counterAction?.Dispose();
     }
 }

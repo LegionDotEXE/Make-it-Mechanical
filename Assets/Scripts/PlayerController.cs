@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.Events;
 public class PlayerController : MonoBehaviour
@@ -7,17 +8,24 @@ public class PlayerController : MonoBehaviour
     public float currentHealth { get; private set; }
 
     [Header("Events - hook UI here (Tommy)")]
-    public UnityEvent<float> OnHealthChanged;  
+    public UnityEvent<float> OnHealthChanged;
     public UnityEvent OnDeath;
     public UnityEvent OnDodge;
     public UnityEvent OnPerfectDodge;
+
+    // cached delegates so we can properly unsubscribe
+    private Action dodgeLeftHandler;
+    private Action dodgeRightHandler;
 
     void Start()
     {
         currentHealth = maxHealth;
 
-        InputManager.Instance.OnDodgeLeft  += () => TryDodge(DodgeDirection.Left);
-        InputManager.Instance.OnDodgeRight += () => TryDodge(DodgeDirection.Right);
+        dodgeLeftHandler  = () => TryDodge(DodgeDirection.Left);
+        dodgeRightHandler = () => TryDodge(DodgeDirection.Right);
+
+        InputManager.Instance.OnDodgeLeft  += dodgeLeftHandler;
+        InputManager.Instance.OnDodgeRight += dodgeRightHandler;
         InputManager.Instance.OnCounter    += TryCounter;
 
         CombatManager.Instance.OnPlayerHit     += TakeHit;
@@ -28,8 +36,8 @@ public class PlayerController : MonoBehaviour
     {
         if (InputManager.Instance != null)
         {
-            InputManager.Instance.OnDodgeLeft  -= () => TryDodge(DodgeDirection.Left);
-            InputManager.Instance.OnDodgeRight -= () => TryDodge(DodgeDirection.Right);
+            InputManager.Instance.OnDodgeLeft  -= dodgeLeftHandler;
+            InputManager.Instance.OnDodgeRight -= dodgeRightHandler;
             InputManager.Instance.OnCounter    -= TryCounter;
         }
         if (CombatManager.Instance != null)
