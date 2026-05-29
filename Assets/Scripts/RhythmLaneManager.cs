@@ -77,9 +77,6 @@ public class RhythmLaneManager : MonoBehaviour
         Instance = this;
     }
 
-    /// <summary>
-    /// Call from UIManager.CreateUI() to build the lane visuals under the canvas.
-    /// </summary>
     public void Initialize(RectTransform canvas)
     {
         canvasRect = canvas;
@@ -231,6 +228,7 @@ public class RhythmLaneManager : MonoBehaviour
     void OnMiss()
     {
         ClearDodgeTiles();
+        ClearCounterTiles();   
         ShowFeedback("HIT!", missFlash);
         FlashJudgmentLine(missFlash);
     }
@@ -265,17 +263,31 @@ public class RhythmLaneManager : MonoBehaviour
         AttackData atk = CombatManager.Instance.CurrentAttack;
         if (atk == null) return;
 
-        // Which hit of the attack is this? The second tile of a double strike gets
-        // marked as a combo follow-up.
         bool isFollowup = (atk.attackType == AttackType.Double) && strikesSeenThisAttack > 0;
         strikesSeenThisAttack++;
 
         // Spawn in the lane the boss is *telegraphing* right now. For a feint this is
         // the fake lane; OnFeintLaneSwitch then darts the tile to the true lane in sync
         // with the boss's reveal, so the rhythm overlay no longer spoils the feint.
-        bool isLeft = (CombatManager.Instance.CurrentTelegraphDirection == DodgeDirection.Left);
-        RectTransform lane = isLeft ? leftLane : rightLane;
-        Color color = isLeft ? leftTileColor : rightTileColor;
+        // Unblockable attacks aren't dodged - they're parried with W - so the prompt
+        // drops in the center (counter) lane instead of a left/right dodge lane.
+        bool unblock = atk.attackType == AttackType.Unblockable;
+        RectTransform lane;
+        Color color;
+        bool asCounterTile;
+        if (unblock)
+        {
+            lane = centerLane;
+            color = counterTileColor;
+            asCounterTile = true;
+        }
+        else
+        {
+            bool isLeft = (CombatManager.Instance.CurrentTelegraphDirection == DodgeDirection.Left);
+            lane = isLeft ? leftLane : rightLane;
+            color = isLeft ? leftTileColor : rightTileColor;
+            asCounterTile = false;
+        }
 
         // Keep a consistent fall *speed* across every hit (set by the first strike's
         // telegraph). A double strike's quick second hit then gets a shorter runway
@@ -319,7 +331,7 @@ public class RhythmLaneManager : MonoBehaviour
             rect = rt,
             image = img,
             fallSpeed = fallSpeed,
-            isCounter = false
+            isCounter = asCounterTile
         });
     }
 
@@ -365,9 +377,6 @@ public class RhythmLaneManager : MonoBehaviour
             }
         }
 
-        // A strike just resolved. Re-arm the spawn guard so the follow-up hit of a
-        // double strike gets its own tile when it enters Windup. (For single attacks
-        // there's no further Windup before Idle, so this is harmless.)
         tileSpawnedForCurrentAttack = false;
     }
 
@@ -398,12 +407,10 @@ public class RhythmLaneManager : MonoBehaviour
         Image img = go.AddComponent<Image>();
         img.raycastTarget = false;
 
-        // rounded look via slight transparency at edges (simple approach)
         Outline outline = go.AddComponent<Outline>();
         outline.effectColor = new Color(1f, 1f, 1f, 0.15f);
         outline.effectDistance = new Vector2(2, -2);
 
-        // combo badge ("2" for a double strike's follow-up hit); hidden by default
         GameObject badge = new GameObject("ComboBadge");
         badge.transform.SetParent(go.transform, false);
         RectTransform brt = badge.AddComponent<RectTransform>();

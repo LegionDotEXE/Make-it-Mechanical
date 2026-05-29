@@ -10,6 +10,8 @@ public class UIManager : MonoBehaviour
     private Image bossFill;
     private Text  playerHPText;
     private Text  bossHPText;
+    private Text  streakText;
+    private int   defenseStreak = 0;
 
     private float playerMax    = 100f;
     private float bossMax      = 200f;
@@ -45,6 +47,12 @@ public class UIManager : MonoBehaviour
         }
 
         CombatManager.Instance.OnPlayerHit += SpawnPlayerHitNumber;
+
+        // defense streak: increases for every successful defense, resets when you get hit
+        CombatManager.Instance.OnPlayerPerfectDodge       += AddStreak;
+        CombatManager.Instance.OnPlayerDodgedSuccessfully += AddStreak;
+        CombatManager.Instance.OnCounterLanded            += AddStreak;
+        CombatManager.Instance.OnPlayerHit                += ResetStreak;
         CombatManager.Instance.OnCounterLanded += SpawnCounterNumber;
 
         CombatManager.Instance.OnPlayerDeath  += () => StartCoroutine(ShowPanel(gameOverPanel, 1.1f));
@@ -56,6 +64,10 @@ public class UIManager : MonoBehaviour
         if (CombatManager.Instance != null)
         {
             CombatManager.Instance.OnPlayerHit        -= SpawnPlayerHitNumber;
+            CombatManager.Instance.OnPlayerPerfectDodge       -= AddStreak;
+            CombatManager.Instance.OnPlayerDodgedSuccessfully -= AddStreak;
+            CombatManager.Instance.OnCounterLanded            -= AddStreak;
+            CombatManager.Instance.OnPlayerHit                -= ResetStreak;
             CombatManager.Instance.OnCounterLanded    -= SpawnCounterNumber;
         }
     }
@@ -118,6 +130,25 @@ public class UIManager : MonoBehaviour
 
     public void UpdateBossHealth(float normalized)
         => bossTarget = Mathf.Clamp01(normalized);
+
+    void AddStreak()
+    {
+        defenseStreak++;
+        if (streakText == null) return;
+        if (defenseStreak >= 2)
+        {
+            streakText.text  = $"STREAK  x{defenseStreak}";
+            streakText.color = defenseStreak >= 8
+                ? new Color(1f, 0.85f, 0.2f)        // gold once you're on a real run
+                : new Color(0.82f, 0.86f, 0.95f);
+        }
+    }
+
+    void ResetStreak()
+    {
+        defenseStreak = 0;
+        if (streakText != null) streakText.color = Color.clear;
+    }
 
     public void TriggerBossRage()
     {
@@ -239,15 +270,33 @@ public class UIManager : MonoBehaviour
             new Color(0.18f, 0.78f, 0.28f), "YOU",
             out ui.playerFill, out ui.playerHPText);
 
-        // boss bar — top-right
+        // boss bar — wide, centered across the top (boss-fight style)
         BuildBar(root, "Boss",
-            new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
-            new Vector2(-24f, -24f), new Vector2(340f, 68f),
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -28f), new Vector2(1000f, 74f),
             new Color(0.85f, 0.14f, 0.1f), "BOSS",
             out ui.bossFill, out ui.bossHPText);
 
         // rhythm lanes
         cgo.AddComponent<RhythmLaneManager>().Initialize(root);
+
+        // defense streak readout (top-center, just under the boss bar)
+        GameObject sgo = new GameObject("StreakText");
+        sgo.transform.SetParent(root, false);
+        RectTransform sRT = sgo.AddComponent<RectTransform>();
+        sRT.anchorMin = new Vector2(0.5f, 1f);
+        sRT.anchorMax = new Vector2(0.5f, 1f);
+        sRT.pivot     = new Vector2(0.5f, 1f);
+        sRT.anchoredPosition = new Vector2(0f, -118f);
+        sRT.sizeDelta = new Vector2(600f, 44f);
+        ui.streakText = sgo.AddComponent<Text>();
+        ui.streakText.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        ui.streakText.fontSize  = 26;
+        ui.streakText.fontStyle = FontStyle.Bold;
+        ui.streakText.alignment = TextAnchor.MiddleCenter;
+        ui.streakText.color     = Color.clear;
+        ui.streakText.raycastTarget = false;
+        sgo.AddComponent<Outline>().effectColor = Color.black;
 
         // damage numbers layer
         GameObject dmgGO = new GameObject("DmgNumbers");

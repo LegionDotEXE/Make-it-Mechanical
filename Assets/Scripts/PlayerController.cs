@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
@@ -6,37 +5,44 @@ using UnityEngine.Events;
 public class PlayerController : MonoBehaviour
 {
     [Header("Health")]
-    public float maxHealth           = 100f;
-    public float currentHealth       { get; private set; }
+    public float maxHealth     = 100f;
+    public float currentHealth { get; private set; }
 
     [Header("Hit Stagger")]
-    public float invincibilityDuration = 0.6f;
+    [Tooltip("Short post-hit mercy. Kept under the double-strike gap so combos can connect.")]
+    public float invincibilityDuration = 0.2f;
     private bool isInvincible = false;
     private bool isDead       = false;
 
     [Header("Events")]
-    public UnityEvent<float> OnHealthChanged     = new UnityEvent<float>();
-    public UnityEvent        OnDeath             = new UnityEvent();
-    public UnityEvent        OnDodge             = new UnityEvent();
-    public UnityEvent        OnPerfectDodge      = new UnityEvent();
+    public UnityEvent<float> OnHealthChanged      = new UnityEvent<float>();
+    public UnityEvent        OnDeath              = new UnityEvent();
     public UnityEvent        OnHitWhileInvincible = new UnityEvent();
 
-    private Action dodgeLeftHandler;
-    private Action dodgeRightHandler;
+    private System.Action dodgeLeftHandler;
+    private System.Action dodgeRightHandler;
 
     void Start()
     {
         currentHealth = maxHealth;
 
-        dodgeLeftHandler  = () => TryDodge(DodgeDirection.Left);
-        dodgeRightHandler = () => TryDodge(DodgeDirection.Right);
+        dodgeLeftHandler  = () => Dodge(DodgeDirection.Left);
+        dodgeRightHandler = () => Dodge(DodgeDirection.Right);
 
-        InputManager.Instance.OnDodgeLeft  += dodgeLeftHandler;
-        InputManager.Instance.OnDodgeRight += dodgeRightHandler;
-        InputManager.Instance.OnCounter    += TryCounter;
+        if (InputManager.Instance != null)
+        {
+            InputManager.Instance.OnDodgeLeft  += dodgeLeftHandler;
+            InputManager.Instance.OnDodgeRight += dodgeRightHandler;
+            InputManager.Instance.OnCounter    += Counter;
+        }
+        else Debug.LogError("[PlayerController] No InputManager in scene.");
 
-        CombatManager.Instance.OnPlayerHit   += TakeHit;
-        CombatManager.Instance.OnPlayerDeath += HandleDeath;
+        if (CombatManager.Instance != null)
+        {
+            CombatManager.Instance.OnPlayerHit   += TakeHit;
+            CombatManager.Instance.OnPlayerDeath += HandleDeath;
+        }
+        else Debug.LogError("[PlayerController] No CombatManager in scene.");
     }
 
     void OnDestroy()
@@ -45,7 +51,7 @@ public class PlayerController : MonoBehaviour
         {
             InputManager.Instance.OnDodgeLeft  -= dodgeLeftHandler;
             InputManager.Instance.OnDodgeRight -= dodgeRightHandler;
-            InputManager.Instance.OnCounter    -= TryCounter;
+            InputManager.Instance.OnCounter    -= Counter;
         }
         if (CombatManager.Instance != null)
         {
@@ -54,22 +60,17 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    void TryDodge(DodgeDirection dir)
+    // mistimed presses get punished.
+    void Dodge(DodgeDirection dir)
     {
         if (isDead) return;
-        bool dodged = CombatManager.Instance.TryDodge(dir);
-        if (!dodged) return;
-
-        if (CombatManager.Instance.CurrentState == CombatState.PerfectWindow)
-            OnPerfectDodge?.Invoke();
-        else
-            OnDodge?.Invoke();
+        CombatManager.Instance.TryStartEvade(dir);
     }
 
-    void TryCounter()
+    void Counter()
     {
         if (isDead) return;
-        CombatManager.Instance.TryCounter();
+        CombatManager.Instance.TryCounterInput();
     }
 
     void TakeHit()
@@ -80,10 +81,12 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        float damage = CombatManager.Instance.CurrentAttack?.damageOnHit ?? 20f;
+        AttackData atk = CombatManager.Instance.CurrentAttack;
+        float damage = atk == null ? 20f
+            : (atk.attackType == AttackType.Unblockable ? atk.unblockableDamage : atk.damageOnHit);
+
         currentHealth -= damage;
         currentHealth  = Mathf.Max(currentHealth, 0f);
-
         OnHealthChanged?.Invoke(currentHealth / maxHealth);
 
         if (currentHealth <= 0f)

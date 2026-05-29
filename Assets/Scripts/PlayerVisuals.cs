@@ -60,6 +60,7 @@ public class PlayerVisuals : MonoBehaviour
         allRenderers = GetComponentsInChildren<SpriteRenderer>();
 
         CombatManager.Instance.OnPlayerDodgedSuccessfully += OnDodge;
+        CombatManager.Instance.OnPlayerEvadeStarted       += OnEvadeStarted;
         CombatManager.Instance.OnPlayerPerfectDodge       += OnPerfectDodge;
         CombatManager.Instance.OnPlayerHit                += OnHit;
         CombatManager.Instance.OnPlayerDeath              += OnDeath;
@@ -72,6 +73,7 @@ public class PlayerVisuals : MonoBehaviour
         if (CombatManager.Instance != null)
         {
             CombatManager.Instance.OnPlayerDodgedSuccessfully -= OnDodge;
+            CombatManager.Instance.OnPlayerEvadeStarted       -= OnEvadeStarted;
             CombatManager.Instance.OnPlayerPerfectDodge       -= OnPerfectDodge;
             CombatManager.Instance.OnPlayerHit                -= OnHit;
             CombatManager.Instance.OnPlayerDeath              -= OnDeath;
@@ -215,6 +217,17 @@ public class PlayerVisuals : MonoBehaviour
     }
 
     // ---- event handlers ----
+
+    void OnEvadeStarted(DodgeDirection dir)
+    {
+        if (isDead) return;
+        // slide immediately on press for responsiveness; the perfect/hit result is
+        // resolved later (at impact) and handled by the other event handlers.
+        float sign = (dir == DodgeDirection.Left) ? -1f : 1f;
+        targetPosition = homePosition + Vector3.right * sign * dodgeSlideDistance;
+        CancelInvoke(nameof(ReturnHome));
+        Invoke(nameof(ReturnHome), 0.35f);
+    }
 
     void OnDodge()
     {

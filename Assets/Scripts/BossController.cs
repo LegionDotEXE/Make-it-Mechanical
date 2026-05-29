@@ -1,25 +1,39 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 
 public class BossController : MonoBehaviour
 {
     [Header("Boss Health")]
-    public float maxHealth     = 200f;
+    public float maxHealth     = 550f;
     public float counterDamage = 25f;
     public float currentHealth { get; private set; }
 
-    [Header("Rage Phase")]
+    [Header("Perfect-Dodge Reward")]
+    [Tooltip("Chip damage dealt to the boss on a perfect dodge, even without a counter.")]
+    public float perfectChipDamage = 6f;
+
+    [Header("Rage Phase (mid fight)")]
     public float rageThreshold  = 0.4f;
     public float rageSpeedMult  = 0.65f;
     public float rageDamageMult = 1.5f;
     public bool  IsEnraged      => isEnraged;
     private bool isEnraged      = false;
 
+    [Header("Final Phase (low HP)")]
+    public float finalThreshold        = 0.15f;
+    [Tooltip("Multiplier applied to every perfect window in the final phase (smaller = harder).")]
+    public float finalPerfectScale     = 0.7f;
+    public bool  IsFinalPhase          => isFinalPhase;
+    private bool isFinalPhase          = false;
+
     [Header("Attacks")]
     public AttackData[] attacks;
 
-    [Header("Loop Settings")]
-    public float delayBetweenAttacks = 0.8f;
+    [Header("Loop / Pacing")]
+    public float delayBetweenAttacks = 0.5f;   
+    public float enragedDelayMult    = 0.5f;
+    public float finalDelayMult      = 0.35f;
 
     [Header("Events")]
     public UnityEvent<float> OnBossHealthChanged = new UnityEvent<float>();
@@ -28,12 +42,12 @@ public class BossController : MonoBehaviour
     public UnityEvent        OnAttackActive      = new UnityEvent();
     public UnityEvent        OnAttackRecovery    = new UnityEvent();
     public UnityEvent        OnRageEntered       = new UnityEvent();
+    public UnityEvent        OnFinalPhaseEntered = new UnityEvent();
 
-    private int   currentAttackIndex = 0;
-    private bool  combatRunning      = false;
-    private float idleTimer          = 0f;
+    private int   lastAttackIndex = -1;
+    private bool  combatRunning   = false;
+    private float idleTimer       = 0f;
 
-    // Reused scratch instance for enraged attacks (instead of leaking a new SO each time).
     private AttackData activeRageInstance;
 
     void Start()
@@ -46,10 +60,11 @@ public class BossController : MonoBehaviour
             return;
         }
 
-        CombatManager.Instance.OnCounterLanded += TakeCounterDamage;
-        CombatManager.Instance.OnStateChanged  += HandleStateChanged;
-        CombatManager.Instance.OnBossDefeated  += HandleDefeated;
-        CombatManager.Instance.OnPlayerDeath   += HandlePlayerDied;
+        CombatManager.Instance.OnCounterLanded     += TakeCounterDamage;
+        CombatManager.Instance.OnPlayerPerfectDodge += TakePerfectChip;
+        CombatManager.Instance.OnStateChanged      += HandleStateChanged;
+        CombatManager.Instance.OnBossDefeated      += HandleDefeated;
+        CombatManager.Instance.OnPlayerDeath       += HandlePlayerDied;
 
         combatRunning = true;
         StartNextAttack();
@@ -59,10 +74,11 @@ public class BossController : MonoBehaviour
     {
         if (CombatManager.Instance != null)
         {
-            CombatManager.Instance.OnCounterLanded -= TakeCounterDamage;
-            CombatManager.Instance.OnStateChanged  -= HandleStateChanged;
-            CombatManager.Instance.OnBossDefeated  -= HandleDefeated;
-            CombatManager.Instance.OnPlayerDeath   -= HandlePlayerDied;
+            CombatManager.Instance.OnCounterLanded      -= TakeCounterDamage;
+            CombatManager.Instance.OnPlayerPerfectDodge -= TakePerfectChip;
+            CombatManager.Instance.OnStateChanged       -= HandleStateChanged;
+            CombatManager.Instance.OnBossDefeated       -= HandleDefeated;
+            CombatManager.Instance.OnPlayerDeath        -= HandlePlayerDied;
         }
 
         if (activeRageInstance != null)
@@ -78,9 +94,8 @@ public class BossController : MonoBehaviour
         if (CombatManager.Instance.CurrentState == CombatState.Idle)
         {
             idleTimer += Time.deltaTime;
-            float delay = isEnraged
-                ? delayBetweenAttacks * 0.5f
-                : delayBetweenAttacks;
+            float delay = delayBetweenAttacks
+                        * (isFinalPhase ? finalDelayMult : isEnraged ? enragedDelayMult : 1f);
             if (idleTimer >= delay)
             {
                 idleTimer = 0f;
@@ -91,15 +106,12 @@ public class BossController : MonoBehaviour
 
     void StartNextAttack()
     {
-        currentAttackIndex = currentAttackIndex % attacks.Length;
-        AttackData src = attacks[currentAttackIndex];
-        currentAttackIndex++;
+        int idx = PickNextIndex();
+        AttackData src = attacks[idx];
 
         AttackData next = src;
         if (isEnraged)
         {
-            // Reuse one instance instead of allocating (and leaking) a new SO per attack.
-            // Safe because only one attack is ever active at a time.
             if (activeRageInstance == null)
                 activeRageInstance = ScriptableObject.CreateInstance<AttackData>();
 
@@ -112,12 +124,44 @@ public class BossController : MonoBehaviour
             rage.perfectWindowRadius = src.perfectWindowRadius;
             rage.requiredDodge       = src.requiredDodge;
             rage.feintSwitchPoint    = src.feintSwitchPoint;
-            rage.doubleStrikeDelay   = src.doubleStrikeDelay;   // was missing - double attacks fell back to default
-            rage.damageOnHit         = src.damageOnHit * rageDamageMult;
+            rage.doubleStrikeDelay   = src.doubleStrikeDelay;
+            rage.damageOnHit         = src.damageOnHit       * rageDamageMult;
+            rage.unblockableDamage   = src.unblockableDamage * rageDamageMult;
             next = rage;
         }
 
         CombatManager.Instance.BeginAttack(next);
+    }
+
+    // Random selection with no immediate repeat. Once enraged, harder attack types are
+    // weighted more heavily so the fight stops being a memorizable sequence.
+    int PickNextIndex()
+    {
+        if (attacks.Length == 1) { lastAttackIndex = 0; return 0; }
+
+        List<int> pool = new List<int>();
+        for (int i = 0; i < attacks.Length; i++)
+        {
+            if (i == lastAttackIndex) continue;
+            int weight = 1;
+            if (isEnraged)
+            {
+                switch (attacks[i].attackType)
+                {
+                    case AttackType.Heavy:
+                    case AttackType.Feint:
+                    case AttackType.Double:
+                    case AttackType.Unblockable:
+                        weight = isFinalPhase ? 4 : 3;
+                        break;
+                }
+            }
+            for (int w = 0; w < weight; w++) pool.Add(i);
+        }
+
+        int pick = pool[Random.Range(0, pool.Count)];
+        lastAttackIndex = pick;
+        return pick;
     }
 
     void HandleStateChanged(CombatState s)
@@ -130,19 +174,33 @@ public class BossController : MonoBehaviour
         }
     }
 
-    void TakeCounterDamage()
+    void TakeCounterDamage() => ApplyBossDamage(counterDamage);
+    void TakePerfectChip()   => ApplyBossDamage(perfectChipDamage);
+
+    void ApplyBossDamage(float amount)
     {
         if (!combatRunning) return;
 
-        currentHealth -= counterDamage;
+        currentHealth -= amount;
         currentHealth  = Mathf.Max(currentHealth, 0f);
         OnBossHealthChanged?.Invoke(currentHealth / maxHealth);
 
-        if (!isEnraged && currentHealth / maxHealth <= rageThreshold)
+        float frac = currentHealth / maxHealth;
+
+        if (!isEnraged && frac <= rageThreshold)
         {
             isEnraged = true;
             OnRageEntered?.Invoke();
             Debug.Log("[Boss] ENRAGED");
+        }
+
+        if (!isFinalPhase && frac <= finalThreshold)
+        {
+            isFinalPhase = true;
+            CombatManager.Instance.perfectWindowScale = finalPerfectScale;
+            CombatManager.Instance.hideAttackTells    = true;
+            OnFinalPhaseEntered?.Invoke();
+            Debug.Log("[Boss] FINAL PHASE");
         }
 
         if (currentHealth <= 0f)
