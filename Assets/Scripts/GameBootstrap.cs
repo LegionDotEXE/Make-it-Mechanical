@@ -76,7 +76,21 @@ public class GameBootstrap : MonoBehaviour
         a4.requiredDodge = DodgeDirection.Right;
         a4.feintSwitchPoint = 0.55f; a4.damageOnHit = 25f;
 
-        return new AttackData[] { a1, a2, a3, a4 };
+        AttackData a5 = ScriptableObject.CreateInstance<AttackData>();
+        a5.name = "FlurryRight"; a5.attackType = AttackType.Double;
+        a5.telegraphDuration = 1.0f; a5.activeDuration = 0.4f;
+        a5.recoveryDuration = 0.9f; a5.perfectWindowRadius = 0.11f;
+        a5.requiredDodge = DodgeDirection.Right; a5.damageOnHit = 15f;
+        a5.doubleStrikeDelay = 0.28f;
+
+        AttackData a6 = ScriptableObject.CreateInstance<AttackData>();
+        a6.name = "FlurryLeft"; a6.attackType = AttackType.Double;
+        a6.telegraphDuration = 1.0f; a6.activeDuration = 0.4f;
+        a6.recoveryDuration = 0.9f; a6.perfectWindowRadius = 0.11f;
+        a6.requiredDodge = DodgeDirection.Left; a6.damageOnHit = 15f;
+        a6.doubleStrikeDelay = 0.24f;
+
+        return new AttackData[] { a1, a2, a3, a4, a5, a6 };
     }
 
     void CreateArena()
