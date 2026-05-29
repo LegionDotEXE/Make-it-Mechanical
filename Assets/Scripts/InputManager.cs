@@ -8,8 +8,8 @@ public class InputManager : MonoBehaviour
 
     public event Action OnDodgeLeft;
     public event Action OnDodgeRight;
-    public event Action OnDodgeAll;    // A+D+W simultaneous
-    public event Action OnCounter;
+    public event Action OnDodgeAll;       // A+D+W simultaneous
+    public event Action<int> OnCounter;   // int = lane (0=left/A, 1=center/W, 2=right/D)
 
     private InputAction dodgeLeftAction;
     private InputAction dodgeRightAction;
@@ -18,8 +18,8 @@ public class InputManager : MonoBehaviour
     // Combo detection: buffer key presses and wait a short window
     // before deciding if it's a single press or a combo.
     private const float COMBO_TOLERANCE = 0.1f; // seconds
-    private float leftPressTime  = -1f;
-    private float rightPressTime = -1f;
+    private float leftPressTime    = -1f;
+    private float rightPressTime   = -1f;
     private float counterPressTime = -1f;
     private bool  leftPending;
     private bool  rightPending;
@@ -73,7 +73,9 @@ public class InputManager : MonoBehaviour
         if (hasRight)   rightPending   = false;
         if (hasCounter) counterPending = false;
 
-        // Fire the appropriate event
+        // Fire the appropriate event.
+        // During ComboRecovery, A/W/D double as counter-lane keys:
+        //   A = lane 0 (left), W = lane 1 (center), D = lane 2 (right)
         if (hasLeft && hasRight && hasCounter)
         {
             OnDodgeAll?.Invoke();
@@ -81,14 +83,16 @@ public class InputManager : MonoBehaviour
         else if (hasLeft)
         {
             OnDodgeLeft?.Invoke();
+            OnCounter?.Invoke(0); // A = left counter lane
         }
         else if (hasRight)
         {
             OnDodgeRight?.Invoke();
+            OnCounter?.Invoke(2); // D = right counter lane
         }
         else if (hasCounter)
         {
-            OnCounter?.Invoke();
+            OnCounter?.Invoke(1); // W = center counter lane
         }
     }
 

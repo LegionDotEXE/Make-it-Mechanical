@@ -102,6 +102,7 @@ public class RhythmLaneManager : MonoBehaviour
             CombatManager.Instance.OnCounterLanded             -= OnCounter;
             CombatManager.Instance.OnFeintSwitch               -= OnFeintLaneSwitch;
             CombatManager.Instance.OnSurgeTriggered            -= OnSurgeSpeedUp;
+            CombatManager.Instance.OnComboCounterReady         -= OnComboCounterTile;
         }
     }
 
@@ -115,6 +116,7 @@ public class RhythmLaneManager : MonoBehaviour
         CombatManager.Instance.OnCounterLanded             += OnCounter;
         CombatManager.Instance.OnFeintSwitch               += OnFeintLaneSwitch;
         CombatManager.Instance.OnSurgeTriggered            += OnSurgeSpeedUp;
+        CombatManager.Instance.OnComboCounterReady         += OnComboCounterTile;
     }
 
     void Update()
@@ -257,6 +259,12 @@ public class RhythmLaneManager : MonoBehaviour
         FlashJudgmentLine(new Color(1f, 0.4f, 0.1f));
     }
 
+    void OnComboCounterTile(int lane)
+    {
+        SpawnCounterTile(lane);
+        ShowFeedback("COUNTER!", counterFlash);
+    }
+
     void OnFeintLaneSwitch()
     {
         bool trueLeft          = (CombatManager.Instance.CurrentAttack.requiredDodge == DodgeDirection.Left);
@@ -355,17 +363,29 @@ public class RhythmLaneManager : MonoBehaviour
         });
     }
 
-    void SpawnCounterTile()
+    /// <summary>
+    /// Spawn a counter tile. lane: 0=left(Q), 1=center(W), 2=right(E).
+    /// Starts from the top of the track and falls at a speed that reaches
+    /// the judgment line in counterFallDuration seconds.
+    /// </summary>
+    void SpawnCounterTile(int lane = 1)
     {
-        // counter tile drops fast in the center lane
         GameObject tileGO = GetOrCreateTile();
         RectTransform rt = tileGO.GetComponent<RectTransform>();
         rt.SetParent(lanesContainer, false);
 
-        float laneX = centerLane.anchoredPosition.x;
-        // spawn closer to the line since the window is short
-        float counterSpawnY = judgmentLineY + 200f;
-        rt.anchoredPosition = new Vector2(laneX, counterSpawnY);
+        // Pick lane position
+        RectTransform laneRT;
+        switch (lane)
+        {
+            case 0:  laneRT = leftLane;   break;
+            case 2:  laneRT = rightLane;  break;
+            default: laneRT = centerLane; break;
+        }
+        float laneX = laneRT.anchoredPosition.x;
+
+        // Start from the top, full runway
+        rt.anchoredPosition = new Vector2(laneX, spawnY);
         rt.sizeDelta = new Vector2(tileWidth * 0.8f, tileHeight * 1.2f);
 
         Image img = tileGO.GetComponent<Image>();
@@ -373,8 +393,9 @@ public class RhythmLaneManager : MonoBehaviour
 
         tileGO.SetActive(true);
 
-        // fall speed: reach judgment in ~0.25s
-        float fallSpeed = 200f / 0.25f;
+        // Fall speed: reach judgment line in ~0.6s from top
+        float counterFallDuration = 0.6f;
+        float fallSpeed = (spawnY - judgmentLineY) / counterFallDuration;
 
         activeTiles.Add(new FallingTile
         {

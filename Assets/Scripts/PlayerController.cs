@@ -24,6 +24,7 @@ public class PlayerController : MonoBehaviour
     private Action dodgeLeftHandler;
     private Action dodgeRightHandler;
     private Action dodgeAllHandler;
+    private Action<int> counterHandler;
 
     void Start()
     {
@@ -32,11 +33,12 @@ public class PlayerController : MonoBehaviour
         dodgeLeftHandler  = () => TryDodge(DodgeDirection.Left);
         dodgeRightHandler = () => TryDodge(DodgeDirection.Right);
         dodgeAllHandler   = () => TryDodge(DodgeDirection.All);
+        counterHandler    = (lane) => TryCounter(lane);
 
         InputManager.Instance.OnDodgeLeft  += dodgeLeftHandler;
         InputManager.Instance.OnDodgeRight += dodgeRightHandler;
         InputManager.Instance.OnDodgeAll   += dodgeAllHandler;
-        InputManager.Instance.OnCounter    += TryCounter;
+        InputManager.Instance.OnCounter    += counterHandler;
 
         CombatManager.Instance.OnPlayerHit   += TakeHit;
         CombatManager.Instance.OnPlayerDeath += HandleDeath;
@@ -49,7 +51,7 @@ public class PlayerController : MonoBehaviour
             InputManager.Instance.OnDodgeLeft  -= dodgeLeftHandler;
             InputManager.Instance.OnDodgeRight -= dodgeRightHandler;
             InputManager.Instance.OnDodgeAll   -= dodgeAllHandler;
-            InputManager.Instance.OnCounter    -= TryCounter;
+            InputManager.Instance.OnCounter    -= counterHandler;
         }
         if (CombatManager.Instance != null)
         {
@@ -70,10 +72,10 @@ public class PlayerController : MonoBehaviour
             OnDodge?.Invoke();
     }
 
-    void TryCounter()
+    void TryCounter(int lane)
     {
         if (isDead) return;
-        CombatManager.Instance.TryCounter();
+        CombatManager.Instance.TryCounter(lane);
     }
 
     void TakeHit()

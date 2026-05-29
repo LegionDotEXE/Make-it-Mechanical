@@ -15,34 +15,44 @@ public class BossController : MonoBehaviour
     public bool  IsEnraged      => isEnraged;
     private bool isEnraged      = false;
 
-    [Header("Attacks")]
-    public AttackData[] attacks;
+    [Header("Combos")]
+    public ComboPattern[] combos;
 
     [Header("Loop Settings")]
     public float delayBetweenAttacks = 0.8f;
+    public float delayBetweenCombos  = 1.2f;
 
     [Header("Events")]
     public UnityEvent<float> OnBossHealthChanged = new UnityEvent<float>();
     public UnityEvent        OnBossDefeated      = new UnityEvent();
     public UnityEvent        OnAttackWindup      = new UnityEvent();
-    public UnityEvent        OnAttackActive      = new UnityEvent();
+    public UnityEvent        OnAttackActive       = new UnityEvent();
     public UnityEvent        OnAttackRecovery    = new UnityEvent();
     public UnityEvent        OnRageEntered       = new UnityEvent();
 
-    private int   currentAttackIndex = 0;
-    private bool  combatRunning      = false;
-    private float idleTimer          = 0f;
+    private bool  combatRunning = false;
+    private float idleTimer     = 0f;
 
-    // Reused scratch instance for enraged attacks (instead of leaking a new SO each time).
+    // Combo tracking
+    private ComboPattern currentCombo;
+    private int          comboAttackIndex;
+    private bool         waitingForComboRecovery;
+    private int          lastComboIndex = -1;
+
+    // Reused scratch instance for modified attacks (rage / mid-combo shortened recovery).
     private AttackData activeRageInstance;
+
+    [Header("Mid-Combo Timing")]
+    [Tooltip("Recovery duration for mid-combo attacks (shorter = tighter combo feel).")]
+    public float midComboRecovery = 0.15f;
 
     void Start()
     {
         currentHealth = maxHealth;
 
-        if (attacks == null || attacks.Length == 0)
+        if (combos == null || combos.Length == 0)
         {
-            Debug.LogError("[BossController] No attacks assigned!");
+            Debug.LogError("[BossController] No combos assigned!");
             return;
         }
 
@@ -52,7 +62,7 @@ public class BossController : MonoBehaviour
         CombatManager.Instance.OnPlayerDeath   += HandlePlayerDied;
 
         combatRunning = true;
-        StartNextAttack();
+        StartNextCombo();
     }
 
     void OnDestroy()
@@ -77,50 +87,105 @@ public class BossController : MonoBehaviour
 
         if (CombatManager.Instance.CurrentState == CombatState.Idle)
         {
-            idleTimer += Time.deltaTime;
-            float delay = isEnraged
-                ? delayBetweenAttacks * 0.5f
-                : delayBetweenAttacks;
-            if (idleTimer >= delay)
+            // If we just finished a combo recovery, start the next combo
+            if (waitingForComboRecovery)
             {
+                waitingForComboRecovery = false;
                 idleTimer = 0f;
-                StartNextAttack();
+                // Brief pause before next combo
+                return;
+            }
+
+            idleTimer += Time.deltaTime;
+
+            // Are we mid-combo or between combos?
+            if (currentCombo != null && comboAttackIndex < currentCombo.attacks.Length)
+            {
+                // Mid-combo: no gap — fire immediately for tight rhythm game feel
+                idleTimer = 0f;
+                FireNextComboAttack();
+            }
+            else
+            {
+                // Between combos: longer delay
+                float delay = isEnraged
+                    ? delayBetweenCombos * 0.5f
+                    : delayBetweenCombos;
+
+                if (idleTimer >= delay)
+                {
+                    idleTimer = 0f;
+                    StartNextCombo();
+                }
             }
         }
     }
 
-    void StartNextAttack()
+    void StartNextCombo()
     {
-        currentAttackIndex = currentAttackIndex % attacks.Length;
-        AttackData src = attacks[currentAttackIndex];
-        currentAttackIndex++;
-
-        AttackData next = src;
-        if (isEnraged)
+        // Pick a random combo, avoiding immediate repeat
+        int pick;
+        if (combos.Length == 1)
         {
-            // Reuse one instance instead of allocating (and leaking) a new SO per attack.
-            // Safe because only one attack is ever active at a time.
-            if (activeRageInstance == null)
-                activeRageInstance = ScriptableObject.CreateInstance<AttackData>();
-
-            AttackData rage = activeRageInstance;
-            rage.name                = src.name + "_RAGE";
-            rage.attackType          = src.attackType;
-            rage.telegraphDuration   = src.telegraphDuration  * rageSpeedMult;
-            rage.activeDuration      = src.activeDuration     * rageSpeedMult;
-            rage.recoveryDuration    = src.recoveryDuration   * rageSpeedMult;
-            rage.perfectWindowRadius = src.perfectWindowRadius;
-            rage.requiredDodge       = src.requiredDodge;
-            rage.feintSwitchPoint    = src.feintSwitchPoint;
-            rage.doubleStrikeDelay   = src.doubleStrikeDelay;
-            rage.surgeWindowStart    = src.surgeWindowStart;
-            rage.surgeWindowEnd      = src.surgeWindowEnd;
-            rage.surgeSpeedMultiplier = src.surgeSpeedMultiplier;
-            rage.damageOnHit         = src.damageOnHit * rageDamageMult;
-            next = rage;
+            pick = 0;
+        }
+        else
+        {
+            do { pick = Random.Range(0, combos.Length); }
+            while (pick == lastComboIndex);
         }
 
-        CombatManager.Instance.BeginAttack(next);
+        lastComboIndex   = pick;
+        currentCombo     = combos[pick];
+        comboAttackIndex = 0;
+
+        Debug.Log($"[Boss] Starting combo: {currentCombo.comboName}");
+        FireNextComboAttack();
+    }
+
+    void FireNextComboAttack()
+    {
+        if (currentCombo == null || comboAttackIndex >= currentCombo.attacks.Length)
+            return;
+
+        AttackData src  = currentCombo.attacks[comboAttackIndex];
+        bool isLastHit  = (comboAttackIndex == currentCombo.attacks.Length - 1);
+        comboAttackIndex++;
+
+        // Suppress perfect window for ALL combo attacks (including the last).
+        // The multi-counter window after the combo replaces the single-attack
+        // perfect→counter flow entirely.
+        CombatManager.Instance.SuppressPerfectWindow = true;
+
+        // Always use a scratch copy so we can tweak recovery/rage without
+        // mutating the original ScriptableObject.
+        if (activeRageInstance == null)
+            activeRageInstance = ScriptableObject.CreateInstance<AttackData>();
+
+        AttackData copy              = activeRageInstance;
+        float speedMult              = isEnraged ? rageSpeedMult : 1f;
+        float dmgMult                = isEnraged ? rageDamageMult : 1f;
+
+        copy.name                    = src.name + (isEnraged ? "_RAGE" : "");
+        copy.attackType              = src.attackType;
+        copy.telegraphDuration       = src.telegraphDuration  * speedMult;
+        copy.activeDuration          = src.activeDuration     * speedMult;
+        copy.perfectWindowRadius     = src.perfectWindowRadius;
+        copy.requiredDodge           = src.requiredDodge;
+        copy.feintSwitchPoint        = src.feintSwitchPoint;
+        copy.doubleStrikeDelay       = src.doubleStrikeDelay;
+        copy.surgeWindowStart        = src.surgeWindowStart;
+        copy.surgeWindowEnd          = src.surgeWindowEnd;
+        copy.surgeSpeedMultiplier    = src.surgeSpeedMultiplier;
+        copy.damageOnHit             = src.damageOnHit * dmgMult;
+
+        // Mid-combo attacks get a very short recovery so the next attack
+        // fires almost immediately — keeps the rhythm tight.
+        copy.recoveryDuration = isLastHit
+            ? src.recoveryDuration * speedMult
+            : midComboRecovery;
+
+        CombatManager.Instance.BeginAttack(copy);
     }
 
     void HandleStateChanged(CombatState s)
@@ -130,6 +195,17 @@ public class BossController : MonoBehaviour
             case CombatState.Windup:   OnAttackWindup?.Invoke();   break;
             case CombatState.Active:   OnAttackActive?.Invoke();   break;
             case CombatState.Recovery: OnAttackRecovery?.Invoke(); break;
+        }
+
+        // When the last attack in a combo finishes its recovery, trigger combo recovery
+        if (s == CombatState.Idle && currentCombo != null &&
+            comboAttackIndex >= currentCombo.attacks.Length &&
+            !waitingForComboRecovery)
+        {
+            int counterCount = currentCombo.RollCounterHits();
+            waitingForComboRecovery = true;
+            CombatManager.Instance.SuppressPerfectWindow = false;
+            CombatManager.Instance.BeginComboRecovery(counterCount);
         }
     }
 

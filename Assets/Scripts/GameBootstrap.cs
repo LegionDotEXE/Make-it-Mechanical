@@ -3,8 +3,8 @@ using UnityEngine.SceneManagement;
 
 public class GameBootstrap : MonoBehaviour
 {
-    [Header("Attack Data")]
-    public AttackData[] attacks;
+    [Header("Combo Patterns (leave empty for defaults)")]
+    public ComboPattern[] combos;
 
     [Header("Layout")]
     public Vector3 playerPosition = new Vector3(0f, -2.5f, 0f);
@@ -37,8 +37,8 @@ public class GameBootstrap : MonoBehaviour
         BossController bc = boss.AddComponent<BossController>();
         boss.AddComponent<BossVisuals>();
 
-        bc.attacks = (attacks != null && attacks.Length > 0)
-            ? attacks : CreateDefaultAttacks();
+        bc.combos = (combos != null && combos.Length > 0)
+            ? combos : CreateDefaultCombos();
 
         UIManager.CreateUI();
 
@@ -46,95 +46,185 @@ public class GameBootstrap : MonoBehaviour
 
         new GameObject("RestartHandler").AddComponent<RestartHandler>();
 
-        Debug.Log("[GameBootstrap] Ready. A=left D=right W=counter R=restart");
+        Debug.Log("[GameBootstrap] Ready. A=left W=counter D=right R=restart");
 
         CreateAudioSystem();
     }
 
-    AttackData[] CreateDefaultAttacks()
+    ComboPattern[] CreateDefaultCombos()
     {
-        AttackData a1 = ScriptableObject.CreateInstance<AttackData>();
-        a1.name = "SwipeLeft"; a1.attackType = AttackType.Normal;
-        a1.telegraphDuration = 1.3f; a1.activeDuration = 0.5f;
-        a1.recoveryDuration = 1.0f; a1.perfectWindowRadius = 0.13f;
-        a1.requiredDodge = DodgeDirection.Left; a1.damageOnHit = 20f;
+        // ---- Individual attacks ----
 
-        AttackData a2 = ScriptableObject.CreateInstance<AttackData>();
-        a2.name = "SwipeRight"; a2.attackType = AttackType.Normal;
-        a2.telegraphDuration = 1.1f; a2.activeDuration = 0.45f;
-        a2.recoveryDuration = 0.9f; a2.perfectWindowRadius = 0.13f;
-        a2.requiredDodge = DodgeDirection.Right; a2.damageOnHit = 20f;
+        AttackData swipeL = ScriptableObject.CreateInstance<AttackData>();
+        swipeL.name = "SwipeLeft"; swipeL.attackType = AttackType.Normal;
+        swipeL.telegraphDuration = 1.3f; swipeL.activeDuration = 0.5f;
+        swipeL.recoveryDuration = 1.0f; swipeL.perfectWindowRadius = 0.13f;
+        swipeL.requiredDodge = DodgeDirection.Left; swipeL.damageOnHit = 20f;
 
-        AttackData a3 = ScriptableObject.CreateInstance<AttackData>();
-        a3.name = "HeavyLeft"; a3.attackType = AttackType.Heavy;
-        a3.telegraphDuration = 2.0f; a3.activeDuration = 0.7f;
-        a3.recoveryDuration = 1.4f; a3.perfectWindowRadius = 0.18f;
-        a3.requiredDodge = DodgeDirection.Left; a3.damageOnHit = 35f;
+        AttackData swipeR = ScriptableObject.CreateInstance<AttackData>();
+        swipeR.name = "SwipeRight"; swipeR.attackType = AttackType.Normal;
+        swipeR.telegraphDuration = 1.1f; swipeR.activeDuration = 0.45f;
+        swipeR.recoveryDuration = 0.9f; swipeR.perfectWindowRadius = 0.13f;
+        swipeR.requiredDodge = DodgeDirection.Right; swipeR.damageOnHit = 20f;
 
-        AttackData a4 = ScriptableObject.CreateInstance<AttackData>();
-        a4.name = "FeintRight"; a4.attackType = AttackType.Feint;
-        a4.telegraphDuration = 1.5f; a4.activeDuration = 0.45f;
-        a4.recoveryDuration = 1.1f; a4.perfectWindowRadius = 0.11f;
-        a4.requiredDodge = DodgeDirection.Right;
-        a4.feintSwitchPoint = 0.55f; a4.damageOnHit = 25f;
+        AttackData heavyL = ScriptableObject.CreateInstance<AttackData>();
+        heavyL.name = "HeavyLeft"; heavyL.attackType = AttackType.Heavy;
+        heavyL.telegraphDuration = 2.0f; heavyL.activeDuration = 0.7f;
+        heavyL.recoveryDuration = 1.4f; heavyL.perfectWindowRadius = 0.18f;
+        heavyL.requiredDodge = DodgeDirection.Left; heavyL.damageOnHit = 35f;
 
-        AttackData a5 = ScriptableObject.CreateInstance<AttackData>();
-        a5.name = "FlurryRight"; a5.attackType = AttackType.Double;
-        a5.telegraphDuration = 1.0f; a5.activeDuration = 0.4f;
-        a5.recoveryDuration = 0.9f; a5.perfectWindowRadius = 0.11f;
-        a5.requiredDodge = DodgeDirection.Right; a5.damageOnHit = 15f;
-        a5.doubleStrikeDelay = 0.28f;
+        AttackData feintR = ScriptableObject.CreateInstance<AttackData>();
+        feintR.name = "FeintRight"; feintR.attackType = AttackType.Feint;
+        feintR.telegraphDuration = 1.5f; feintR.activeDuration = 0.45f;
+        feintR.recoveryDuration = 1.1f; feintR.perfectWindowRadius = 0.11f;
+        feintR.requiredDodge = DodgeDirection.Right;
+        feintR.feintSwitchPoint = 0.55f; feintR.damageOnHit = 25f;
 
-        AttackData a6 = ScriptableObject.CreateInstance<AttackData>();
-        a6.name = "FlurryLeft"; a6.attackType = AttackType.Double;
-        a6.telegraphDuration = 1.0f; a6.activeDuration = 0.4f;
-        a6.recoveryDuration = 0.9f; a6.perfectWindowRadius = 0.11f;
-        a6.requiredDodge = DodgeDirection.Left; a6.damageOnHit = 15f;
-        a6.doubleStrikeDelay = 0.24f;
+        AttackData feintL = ScriptableObject.CreateInstance<AttackData>();
+        feintL.name = "FeintLeft"; feintL.attackType = AttackType.Feint;
+        feintL.telegraphDuration = 1.3f; feintL.activeDuration = 0.4f;
+        feintL.recoveryDuration = 1.0f; feintL.perfectWindowRadius = 0.10f;
+        feintL.requiredDodge = DodgeDirection.Left;
+        feintL.feintSwitchPoint = 0.45f; feintL.damageOnHit = 25f;
 
-        AttackData a7 = ScriptableObject.CreateInstance<AttackData>();
-        a7.name = "FeintLeft"; a7.attackType = AttackType.Feint;
-        a7.telegraphDuration = 1.3f; a7.activeDuration = 0.4f;
-        a7.recoveryDuration = 1.0f; a7.perfectWindowRadius = 0.10f;
-        a7.requiredDodge = DodgeDirection.Left;
-        a7.feintSwitchPoint = 0.45f; a7.damageOnHit = 25f;
+        AttackData flurryR = ScriptableObject.CreateInstance<AttackData>();
+        flurryR.name = "FlurryRight"; flurryR.attackType = AttackType.Double;
+        flurryR.telegraphDuration = 1.0f; flurryR.activeDuration = 0.4f;
+        flurryR.recoveryDuration = 0.9f; flurryR.perfectWindowRadius = 0.11f;
+        flurryR.requiredDodge = DodgeDirection.Right; flurryR.damageOnHit = 15f;
+        flurryR.doubleStrikeDelay = 0.28f;
 
-        AttackData a8 = ScriptableObject.CreateInstance<AttackData>();
-        a8.name = "QuickJabRight"; a8.attackType = AttackType.Normal;
-        a8.telegraphDuration = 0.7f; a8.activeDuration = 0.35f;
-        a8.recoveryDuration = 0.7f; a8.perfectWindowRadius = 0.10f;
-        a8.requiredDodge = DodgeDirection.Right; a8.damageOnHit = 12f;
+        AttackData flurryL = ScriptableObject.CreateInstance<AttackData>();
+        flurryL.name = "FlurryLeft"; flurryL.attackType = AttackType.Double;
+        flurryL.telegraphDuration = 1.0f; flurryL.activeDuration = 0.4f;
+        flurryL.recoveryDuration = 0.9f; flurryL.perfectWindowRadius = 0.11f;
+        flurryL.requiredDodge = DodgeDirection.Left; flurryL.damageOnHit = 15f;
+        flurryL.doubleStrikeDelay = 0.24f;
 
-        AttackData a9 = ScriptableObject.CreateInstance<AttackData>();
-        a9.name = "QuickJabLeft"; a9.attackType = AttackType.Normal;
-        a9.telegraphDuration = 0.7f; a9.activeDuration = 0.35f;
-        a9.recoveryDuration = 0.7f; a9.perfectWindowRadius = 0.10f;
-        a9.requiredDodge = DodgeDirection.Left; a9.damageOnHit = 12f;
+        AttackData jabR = ScriptableObject.CreateInstance<AttackData>();
+        jabR.name = "QuickJabRight"; jabR.attackType = AttackType.Normal;
+        jabR.telegraphDuration = 0.7f; jabR.activeDuration = 0.35f;
+        jabR.recoveryDuration = 0.7f; jabR.perfectWindowRadius = 0.10f;
+        jabR.requiredDodge = DodgeDirection.Right; jabR.damageOnHit = 12f;
 
-        AttackData a10 = ScriptableObject.CreateInstance<AttackData>();
-        a10.name = "SurgeRight"; a10.attackType = AttackType.Surge;
-        a10.telegraphDuration = 1.8f; a10.activeDuration = 0.5f;
-        a10.recoveryDuration = 1.0f; a10.perfectWindowRadius = 0.12f;
-        a10.requiredDodge = DodgeDirection.Right; a10.damageOnHit = 28f;
-        a10.surgeWindowStart = 0.3f; a10.surgeWindowEnd = 0.65f;
-        a10.surgeSpeedMultiplier = 2.5f;
+        AttackData jabL = ScriptableObject.CreateInstance<AttackData>();
+        jabL.name = "QuickJabLeft"; jabL.attackType = AttackType.Normal;
+        jabL.telegraphDuration = 0.7f; jabL.activeDuration = 0.35f;
+        jabL.recoveryDuration = 0.7f; jabL.perfectWindowRadius = 0.10f;
+        jabL.requiredDodge = DodgeDirection.Left; jabL.damageOnHit = 12f;
 
-        AttackData a11 = ScriptableObject.CreateInstance<AttackData>();
-        a11.name = "SurgeLeft"; a11.attackType = AttackType.Surge;
-        a11.telegraphDuration = 1.8f; a11.activeDuration = 0.5f;
-        a11.recoveryDuration = 1.0f; a11.perfectWindowRadius = 0.12f;
-        a11.requiredDodge = DodgeDirection.Left; a11.damageOnHit = 28f;
-        a11.surgeWindowStart = 0.3f; a11.surgeWindowEnd = 0.65f;
-        a11.surgeSpeedMultiplier = 2.5f;
+        AttackData surgeR = ScriptableObject.CreateInstance<AttackData>();
+        surgeR.name = "SurgeRight"; surgeR.attackType = AttackType.Surge;
+        surgeR.telegraphDuration = 1.8f; surgeR.activeDuration = 0.5f;
+        surgeR.recoveryDuration = 1.0f; surgeR.perfectWindowRadius = 0.12f;
+        surgeR.requiredDodge = DodgeDirection.Right; surgeR.damageOnHit = 28f;
+        surgeR.surgeWindowStart = 0.3f; surgeR.surgeWindowEnd = 0.65f;
+        surgeR.surgeSpeedMultiplier = 2.5f;
 
-        // Combo: All (A+D+W) — the Overhead Slam
-        AttackData a12 = ScriptableObject.CreateInstance<AttackData>();
-        a12.name = "OverheadSlam"; a12.attackType = AttackType.Combo;
-        a12.telegraphDuration = 2.2f; a12.activeDuration = 0.7f;
-        a12.recoveryDuration = 1.5f; a12.perfectWindowRadius = 0.18f;
-        a12.requiredDodge = DodgeDirection.All; a12.damageOnHit = 45f;
+        AttackData surgeL = ScriptableObject.CreateInstance<AttackData>();
+        surgeL.name = "SurgeLeft"; surgeL.attackType = AttackType.Surge;
+        surgeL.telegraphDuration = 1.8f; surgeL.activeDuration = 0.5f;
+        surgeL.recoveryDuration = 1.0f; surgeL.perfectWindowRadius = 0.12f;
+        surgeL.requiredDodge = DodgeDirection.Left; surgeL.damageOnHit = 28f;
+        surgeL.surgeWindowStart = 0.3f; surgeL.surgeWindowEnd = 0.65f;
+        surgeL.surgeSpeedMultiplier = 2.5f;
 
-        return new AttackData[] { a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12 };
+        AttackData slam = ScriptableObject.CreateInstance<AttackData>();
+        slam.name = "OverheadSlam"; slam.attackType = AttackType.Combo;
+        slam.telegraphDuration = 2.2f; slam.activeDuration = 0.7f;
+        slam.recoveryDuration = 1.5f; slam.perfectWindowRadius = 0.18f;
+        slam.requiredDodge = DodgeDirection.All; slam.damageOnHit = 45f;
+
+        // ---- Fast variants for hard combos (shorter telegraphs) ----
+
+        AttackData fastSwipeL = ScriptableObject.CreateInstance<AttackData>();
+        fastSwipeL.name = "FastSwipeLeft"; fastSwipeL.attackType = AttackType.Normal;
+        fastSwipeL.telegraphDuration = 0.5f; fastSwipeL.activeDuration = 0.35f;
+        fastSwipeL.recoveryDuration = 0.5f; fastSwipeL.perfectWindowRadius = 0.09f;
+        fastSwipeL.requiredDodge = DodgeDirection.Left; fastSwipeL.damageOnHit = 18f;
+
+        AttackData fastSwipeR = ScriptableObject.CreateInstance<AttackData>();
+        fastSwipeR.name = "FastSwipeRight"; fastSwipeR.attackType = AttackType.Normal;
+        fastSwipeR.telegraphDuration = 0.5f; fastSwipeR.activeDuration = 0.35f;
+        fastSwipeR.recoveryDuration = 0.5f; fastSwipeR.perfectWindowRadius = 0.09f;
+        fastSwipeR.requiredDodge = DodgeDirection.Right; fastSwipeR.damageOnHit = 18f;
+
+        AttackData fastJabL = ScriptableObject.CreateInstance<AttackData>();
+        fastJabL.name = "FastJabLeft"; fastJabL.attackType = AttackType.Normal;
+        fastJabL.telegraphDuration = 0.4f; fastJabL.activeDuration = 0.25f;
+        fastJabL.recoveryDuration = 0.4f; fastJabL.perfectWindowRadius = 0.08f;
+        fastJabL.requiredDodge = DodgeDirection.Left; fastJabL.damageOnHit = 10f;
+
+        AttackData fastJabR = ScriptableObject.CreateInstance<AttackData>();
+        fastJabR.name = "FastJabRight"; fastJabR.attackType = AttackType.Normal;
+        fastJabR.telegraphDuration = 0.4f; fastJabR.activeDuration = 0.25f;
+        fastJabR.recoveryDuration = 0.4f; fastJabR.perfectWindowRadius = 0.08f;
+        fastJabR.requiredDodge = DodgeDirection.Right; fastJabR.damageOnHit = 10f;
+
+        AttackData fastFeintR = ScriptableObject.CreateInstance<AttackData>();
+        fastFeintR.name = "FastFeintRight"; fastFeintR.attackType = AttackType.Feint;
+        fastFeintR.telegraphDuration = 0.6f; fastFeintR.activeDuration = 0.3f;
+        fastFeintR.recoveryDuration = 0.5f; fastFeintR.perfectWindowRadius = 0.08f;
+        fastFeintR.requiredDodge = DodgeDirection.Right;
+        fastFeintR.feintSwitchPoint = 0.5f; fastFeintR.damageOnHit = 22f;
+
+        // ---- 6 Combo Patterns ----
+
+        // Combo 1: "Flurry Assault" — fast jabs into a flurry finisher
+        ComboPattern c1 = new ComboPattern
+        {
+            comboName = "Flurry Assault",
+            attacks = new AttackData[] { jabL, jabR, jabL, flurryR },
+            minCounterHits = 1,
+            maxCounterHits = 2
+        };
+
+        // Combo 2: "Deceptive Onslaught" — feints mixed with swipes
+        ComboPattern c2 = new ComboPattern
+        {
+            comboName = "Deceptive Onslaught",
+            attacks = new AttackData[] { swipeR, feintL, swipeL, feintR, flurryL },
+            minCounterHits = 2,
+            maxCounterHits = 3
+        };
+
+        // Combo 3: "Wrath of the Abyss" — heavy + surge, big damage
+        ComboPattern c3 = new ComboPattern
+        {
+            comboName = "Wrath of the Abyss",
+            attacks = new AttackData[] { heavyL, surgeR, swipeL, surgeL, heavyL, slam },
+            minCounterHits = 2,
+            maxCounterHits = 3
+        };
+
+        // Combo 4: "Relentless Barrage" — long chain of mixed attacks
+        ComboPattern c4 = new ComboPattern
+        {
+            comboName = "Relentless Barrage",
+            attacks = new AttackData[] { jabR, swipeL, flurryR, feintL, surgeR },
+            minCounterHits = 1,
+            maxCounterHits = 3
+        };
+
+        // Combo 5: "Blade Storm" — rapid-fire alternating slashes, no breathing room
+        ComboPattern c5 = new ComboPattern
+        {
+            comboName = "Blade Storm",
+            attacks = new AttackData[] { fastJabL, fastJabR, fastSwipeL, fastJabR, fastSwipeR, fastJabL },
+            minCounterHits = 2,
+            maxCounterHits = 3
+        };
+
+        // Combo 6: "Abyssal Frenzy" — fast attacks with a feint thrown in to trip you up
+        ComboPattern c6 = new ComboPattern
+        {
+            comboName = "Abyssal Frenzy",
+            attacks = new AttackData[] { fastSwipeR, fastJabL, fastFeintR, fastSwipeL, fastJabR, fastSwipeL, slam },
+            minCounterHits = 2,
+            maxCounterHits = 3
+        };
+
+        return new ComboPattern[] { c1, c2, c3, c4, c5, c6 };
     }
 
     void CreateArena()
