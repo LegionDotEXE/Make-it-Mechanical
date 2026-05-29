@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -27,6 +28,10 @@ public class BossController : MonoBehaviour
     private bool combatRunning = false;
     private float idleTimer = 0f;
 
+    // Boss state
+    public BossState CurrentBossState { get; private set; } = BossState.Start;
+    public event Action<BossState> OnBossStateChanged;
+
     void Start()
     {
         currentHealth = maxHealth;
@@ -41,6 +46,7 @@ public class BossController : MonoBehaviour
         CombatManager.Instance.OnStateChanged  += HandleStateChanged;
         CombatManager.Instance.OnBossDefeated  += HandleDefeated;
 
+        ChangeBossState(BossState.Start);
         combatRunning = true;
         StartNextAttack();
     }
@@ -79,8 +85,19 @@ public class BossController : MonoBehaviour
         AttackData next = attacks[currentAttackIndex];
         currentAttackIndex++;
 
-        Debug.Log($"[Boss] starting attack: {next.name}  required dodge: {next.requiredDodge}");
+        ChangeBossState(next.bossState);
+
+        Debug.Log($"[Boss] starting attack: {next.name}, boss state: {next.bossState}, required dodge: {next.requiredDodge}");
+
         CombatManager.Instance.BeginAttack(next);
+    }
+
+    void ChangeBossState(BossState newState)
+    {
+        CurrentBossState = newState;
+        OnBossStateChanged?.Invoke(newState);
+
+        Debug.Log("[BossState] -> " + newState);
     }
 
     void HandleStateChanged(CombatState newState)
