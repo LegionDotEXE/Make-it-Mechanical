@@ -99,7 +99,19 @@ public class GameBootstrap : MonoBehaviour
         a7.requiredDodge = DodgeDirection.Left;
         a7.feintSwitchPoint = 0.45f; a7.damageOnHit = 25f;
 
-        return new AttackData[] { a1, a2, a3, a4, a5, a6, a7 };
+        AttackData a8 = ScriptableObject.CreateInstance<AttackData>();
+        a8.name = "QuickJabRight"; a8.attackType = AttackType.Normal;
+        a8.telegraphDuration = 0.7f; a8.activeDuration = 0.35f;
+        a8.recoveryDuration = 0.7f; a8.perfectWindowRadius = 0.10f;
+        a8.requiredDodge = DodgeDirection.Right; a8.damageOnHit = 12f;
+
+        AttackData a9 = ScriptableObject.CreateInstance<AttackData>();
+        a9.name = "QuickJabLeft"; a9.attackType = AttackType.Normal;
+        a9.telegraphDuration = 0.7f; a9.activeDuration = 0.35f;
+        a9.recoveryDuration = 0.7f; a9.perfectWindowRadius = 0.10f;
+        a9.requiredDodge = DodgeDirection.Left; a9.damageOnHit = 12f;
+
+        return new AttackData[] { a1, a2, a3, a4, a5, a6, a7, a8, a9 };
     }
 
     void CreateArena()
