@@ -17,7 +17,10 @@ public class BossVisuals : MonoBehaviour
     private Color counterHitColor = new Color(1f,    0.95f, 0.3f,  1f);
     private Color staggerColor    = new Color(0.7f,  0.6f,  0.2f,  1f);
     private Color heavyColor      = new Color(0.5f,  0.03f, 0.03f, 1f);
-    private Color feintColor      = new Color(0.4f,  0.1f,  0.5f,  1f); 
+    private Color feintColor      = new Color(0.4f,  0.1f,  0.5f,  1f);
+    private Color surgeColor      = new Color(1f,    0.45f, 0.1f,  1f);
+    private Color surgeFlashColor = new Color(1f,    0.7f,  0.2f,  1f);
+    private Color slamColor       = new Color(1f,    0.5f,  0.1f,  1f);  // fiery for All/Overhead Slam
 
     // telegraph
     private GameObject telegraphLeft_GO;
@@ -53,17 +56,19 @@ public class BossVisuals : MonoBehaviour
         CombatManager.Instance.OnStateChanged  += OnStateChanged;
         CombatManager.Instance.OnCounterLanded += OnCounterHit;
         CombatManager.Instance.OnBossDefeated  += OnDefeated;
-        CombatManager.Instance.OnFeintSwitch   += OnFeintSwitch;
+        CombatManager.Instance.OnFeintSwitch    += OnFeintSwitch;
+        CombatManager.Instance.OnSurgeTriggered += OnSurge;
     }
 
     void OnDestroy()
     {
         if (CombatManager.Instance != null)
         {
-            CombatManager.Instance.OnStateChanged  -= OnStateChanged;
-            CombatManager.Instance.OnCounterLanded -= OnCounterHit;
-            CombatManager.Instance.OnBossDefeated  -= OnDefeated;
-            CombatManager.Instance.OnFeintSwitch   -= OnFeintSwitch;
+            CombatManager.Instance.OnStateChanged   -= OnStateChanged;
+            CombatManager.Instance.OnCounterLanded  -= OnCounterHit;
+            CombatManager.Instance.OnBossDefeated   -= OnDefeated;
+            CombatManager.Instance.OnFeintSwitch    -= OnFeintSwitch;
+            CombatManager.Instance.OnSurgeTriggered -= OnSurge;
         }
     }
 
@@ -79,10 +84,14 @@ public class BossVisuals : MonoBehaviour
         if (currentState == CombatState.Windup && bodyRenderer != null)
         {
             AttackData atk = CombatManager.Instance.CurrentAttack;
-            float baseSpeed = (atk?.attackType == AttackType.Heavy) ? 3f : 7f;
+            bool isSlam = atk?.attackType == AttackType.Combo;
+            float baseSpeed = (atk?.attackType == AttackType.Heavy || isSlam) ? 3f :
+                              (atk?.attackType == AttackType.Surge) ? 5f : 7f;
             float pulse = (Mathf.Sin(Time.time * baseSpeed) + 1f) / 2f;
-            Color target = (atk?.attackType == AttackType.Heavy) ? heavyColor :
-                           (atk?.attackType == AttackType.Feint)  ? feintColor : windupColor;
+            Color target = (atk?.attackType == AttackType.Heavy)  ? heavyColor :
+                           (atk?.attackType == AttackType.Feint)   ? feintColor :
+                           (atk?.attackType == AttackType.Surge)   ? surgeColor :
+                           (isSlam)                                ? slamColor : windupColor;
             bodyRenderer.color = Color.Lerp(idleColor, target, pulse);
 
             if (eyeRenderers != null)
@@ -240,8 +249,9 @@ public class BossVisuals : MonoBehaviour
         // so the arrow actually flips mid-windup instead of lying for the whole telegraph.
         DodgeDirection shownDir = CombatManager.Instance.CurrentTelegraphDirection;
 
-        telegraphLeft_GO.SetActive(show  && shownDir == DodgeDirection.Left);
-        telegraphRight_GO.SetActive(show && shownDir == DodgeDirection.Right);
+        bool showAll = (shownDir == DodgeDirection.All);
+        telegraphLeft_GO.SetActive(show  && (shownDir == DodgeDirection.Left || showAll));
+        telegraphRight_GO.SetActive(show && (shownDir == DodgeDirection.Right || showAll));
 
         if (!show) return;
 
@@ -293,18 +303,38 @@ public class BossVisuals : MonoBehaviour
                 {
                     attackTypeIndicatorSR.color = atk.attackType switch
                     {
-                        AttackType.Heavy  => new Color(1f, 0.3f, 0.05f, 0.9f), 
-                        AttackType.Feint  => new Color(0.7f, 0.1f, 0.9f, 0.9f), 
-                        AttackType.Double => new Color(0.2f, 0.8f, 1f,  0.9f),  
-                        _                 => new Color(1f, 0.2f, 0.1f,  0.9f), 
+                        AttackType.Heavy  => new Color(1f, 0.3f, 0.05f, 0.9f),
+                        AttackType.Feint  => new Color(0.7f, 0.1f, 0.9f, 0.9f),
+                        AttackType.Double => new Color(0.2f, 0.8f, 1f,  0.9f),
+                        AttackType.Surge  => new Color(1f, 0.45f, 0.1f, 0.9f),
+                        AttackType.Combo  => new Color(1f, 0.5f, 0.1f, 0.9f),
+                        _                 => new Color(1f, 0.2f, 0.1f,  0.9f),
                     };
                 }
 
                 if (weaponRenderer != null && atk != null)
                 {
-                    float sign = (atk.requiredDodge == DodgeDirection.Left) ? 1f : -1f;
-                    float pullAngle = (atk.attackType == AttackType.Heavy) ? 90f : 75f;
-                    weaponRenderer.transform.localRotation = Quaternion.Euler(0, 0, sign * pullAngle);
+                    bool isSlamCombo = (atk.requiredDodge == DodgeDirection.All);
+                    if (isSlamCombo)
+                    {
+                        // Both weapons up for overhead slam
+                        float pullAngle = 95f;
+                        weaponRenderer.transform.localRotation = Quaternion.Euler(0, 0, pullAngle);
+                        // show second weapon
+                        Transform w2 = transform.Find("Weapon2");
+                        if (w2 != null)
+                        {
+                            SpriteRenderer w2sr = w2.GetComponent<SpriteRenderer>();
+                            if (w2sr != null) w2sr.color = new Color(0.45f, 0.38f, 0.32f, 0.9f);
+                            w2.localRotation = Quaternion.Euler(0, 0, -pullAngle);
+                        }
+                    }
+                    else
+                    {
+                        float sign = (atk.requiredDodge == DodgeDirection.Left) ? 1f : -1f;
+                        float pullAngle = (atk.attackType == AttackType.Heavy) ? 90f : 75f;
+                        weaponRenderer.transform.localRotation = Quaternion.Euler(0, 0, sign * pullAngle);
+                    }
                 }
 
                 // Feint eye flash is triggered by OnFeintSwitch now, so it lands exactly
@@ -374,6 +404,31 @@ public class BossVisuals : MonoBehaviour
         targetPosition = origin;
     }
 
+    void OnSurge()
+    {
+        if (isDefeated) return;
+        StartCoroutine(SurgeFlash());
+    }
+
+    IEnumerator SurgeFlash()
+    {
+        // sudden lunge forward + orange flash when the boss accelerates
+        targetPosition = homePosition + Vector3.down * 0.6f;
+        for (int i = 0; i < 4; i++)
+        {
+            if (bodyRenderer) bodyRenderer.color = surgeFlashColor;
+            if (eyeRenderers != null)
+                foreach (var e in eyeRenderers)
+                    e.color = new Color(1f, 0.9f, 0.3f, 1f);
+            yield return new WaitForSeconds(0.05f);
+            if (bodyRenderer) bodyRenderer.color = surgeColor;
+            if (eyeRenderers != null)
+                foreach (var e in eyeRenderers)
+                    e.color = new Color(1f, 0.5f, 0.1f, 0.9f);
+            yield return new WaitForSeconds(0.05f);
+        }
+    }
+
     void OnFeintSwitch()
     {
         if (isDefeated) return;
@@ -437,6 +492,14 @@ public class BossVisuals : MonoBehaviour
     {
         if (weaponRenderer)
             weaponRenderer.transform.localRotation = Quaternion.Euler(0, 0, 30f);
+
+        // Hide second weapon after combo attacks
+        Transform w2 = transform.Find("Weapon2");
+        if (w2 != null)
+        {
+            SpriteRenderer w2sr = w2.GetComponent<SpriteRenderer>();
+            if (w2sr != null) w2sr.color = new Color(0.45f, 0.38f, 0.32f, 0f);
+        }
     }
 
     private float windupStartTime;

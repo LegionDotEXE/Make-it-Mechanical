@@ -32,6 +32,7 @@ public class RhythmLaneManager : MonoBehaviour
     public Color leftTileColor   = new Color(0.3f, 0.5f, 0.9f, 0.9f);   // cold blue
     public Color rightTileColor  = new Color(0.9f, 0.3f, 0.2f, 0.9f);   // blood red
     public Color counterTileColor= new Color(1f, 0.85f, 0.2f, 0.95f);   // gold
+    public Color allTileColor    = new Color(1f, 0.5f, 0.1f, 0.95f);    // fiery orange
     public Color laneColor       = new Color(0.1f, 0.08f, 0.06f, 0.7f); // dark translucent
     public Color laneBorderColor = new Color(0.25f, 0.2f, 0.15f, 0.5f);
     public Color judgmentColor   = new Color(0.8f, 0.7f, 0.5f, 0.6f);   // faded gold line
@@ -100,6 +101,7 @@ public class RhythmLaneManager : MonoBehaviour
             CombatManager.Instance.OnPlayerHit                 -= OnMiss;
             CombatManager.Instance.OnCounterLanded             -= OnCounter;
             CombatManager.Instance.OnFeintSwitch               -= OnFeintLaneSwitch;
+            CombatManager.Instance.OnSurgeTriggered            -= OnSurgeSpeedUp;
         }
     }
 
@@ -112,6 +114,7 @@ public class RhythmLaneManager : MonoBehaviour
         CombatManager.Instance.OnPlayerHit                 += OnMiss;
         CombatManager.Instance.OnCounterLanded             += OnCounter;
         CombatManager.Instance.OnFeintSwitch               += OnFeintLaneSwitch;
+        CombatManager.Instance.OnSurgeTriggered            += OnSurgeSpeedUp;
     }
 
     void Update()
@@ -242,6 +245,18 @@ public class RhythmLaneManager : MonoBehaviour
         FlashJudgmentLine(counterFlash);
     }
 
+    void OnSurgeSpeedUp()
+    {
+        float mult = CombatManager.Instance.SurgeFallSpeedMultiplier;
+        foreach (var tile in activeTiles)
+        {
+            if (tile.isCounter) continue;
+            tile.fallSpeed *= mult;
+        }
+        ShowFeedback("SURGE!", new Color(1f, 0.4f, 0.1f));
+        FlashJudgmentLine(new Color(1f, 0.4f, 0.1f));
+    }
+
     void OnFeintLaneSwitch()
     {
         bool trueLeft          = (CombatManager.Instance.CurrentAttack.requiredDodge == DodgeDirection.Left);
@@ -270,12 +285,30 @@ public class RhythmLaneManager : MonoBehaviour
         bool isFollowup = (atk.attackType == AttackType.Double) && strikesSeenThisAttack > 0;
         strikesSeenThisAttack++;
 
-        // Spawn in the lane the boss is *telegraphing* right now. For a feint this is
-        // the fake lane; OnFeintLaneSwitch then darts the tile to the true lane in sync
-        // with the boss's reveal, so the rhythm overlay no longer spoils the feint.
-        bool isLeft = (CombatManager.Instance.CurrentTelegraphDirection == DodgeDirection.Left);
-        RectTransform lane = isLeft ? leftLane : rightLane;
-        Color color = isLeft ? leftTileColor : rightTileColor;
+        // Determine tile position, size, and color based on dodge direction
+        DodgeDirection dir = CombatManager.Instance.CurrentTelegraphDirection;
+        float laneX;
+        float width;
+        Color color;
+
+        switch (dir)
+        {
+            case DodgeDirection.All:
+                // Extra-wide tile spanning all three lanes
+                laneX = 0f;
+                width = laneWidth * 3 + laneSpacing * 2;
+                color = allTileColor;
+                break;
+
+            default:
+                // Normal single-lane tile
+                bool isLeft = (dir == DodgeDirection.Left);
+                RectTransform lane = isLeft ? leftLane : rightLane;
+                laneX = lane.anchoredPosition.x;
+                width = tileWidth;
+                color = isLeft ? leftTileColor : rightTileColor;
+                break;
+        }
 
         // Keep a consistent fall *speed* across every hit (set by the first strike's
         // telegraph). A double strike's quick second hit then gets a shorter runway
@@ -293,9 +326,8 @@ public class RhythmLaneManager : MonoBehaviour
         RectTransform rt = tileGO.GetComponent<RectTransform>();
         rt.SetParent(lanesContainer, false);
 
-        float laneX = lane.anchoredPosition.x;
         rt.anchoredPosition = new Vector2(laneX, startY);
-        rt.sizeDelta = new Vector2(tileWidth, tileHeight);
+        rt.sizeDelta = new Vector2(width, tileHeight);
 
         Image img = tileGO.GetComponent<Image>();
         img.color = color;

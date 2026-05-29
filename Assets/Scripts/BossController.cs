@@ -112,7 +112,10 @@ public class BossController : MonoBehaviour
             rage.perfectWindowRadius = src.perfectWindowRadius;
             rage.requiredDodge       = src.requiredDodge;
             rage.feintSwitchPoint    = src.feintSwitchPoint;
-            rage.doubleStrikeDelay   = src.doubleStrikeDelay;   // was missing - double attacks fell back to default
+            rage.doubleStrikeDelay   = src.doubleStrikeDelay;
+            rage.surgeWindowStart    = src.surgeWindowStart;
+            rage.surgeWindowEnd      = src.surgeWindowEnd;
+            rage.surgeSpeedMultiplier = src.surgeSpeedMultiplier;
             rage.damageOnHit         = src.damageOnHit * rageDamageMult;
             next = rage;
         }

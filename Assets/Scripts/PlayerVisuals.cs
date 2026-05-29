@@ -220,6 +220,17 @@ public class PlayerVisuals : MonoBehaviour
     {
         if (isDead) return;
         DodgeDirection dir = CombatManager.Instance.CurrentAttack.requiredDodge;
+
+        if (dir == DodgeDirection.All)
+        {
+            // Brace: crouch down instead of sliding sideways
+            targetPosition = homePosition + Vector3.down * 0.5f;
+            FlashAll(new Color(1f, 0.5f, 0.1f, 1f)); // fiery orange
+            CancelInvoke(nameof(ReturnHome));
+            Invoke(nameof(ReturnHome), 0.4f);
+            return;
+        }
+
         float sign = (dir == DodgeDirection.Left) ? -1f : 1f;
         targetPosition = homePosition + Vector3.right * sign * dodgeSlideDistance;
         FlashAll(dodgeColor);
@@ -231,6 +242,18 @@ public class PlayerVisuals : MonoBehaviour
     {
         if (isDead) return;
         DodgeDirection dir = CombatManager.Instance.CurrentAttack.requiredDodge;
+
+        if (dir == DodgeDirection.All)
+        {
+            // Perfect brace: bigger crouch + squash
+            targetPosition = homePosition + Vector3.down * 0.7f;
+            FlashAll(perfectColor);
+            StartCoroutine(PerfectSquash());
+            CancelInvoke(nameof(ReturnHome));
+            Invoke(nameof(ReturnHome), 0.65f);
+            return;
+        }
+
         float sign = (dir == DodgeDirection.Left) ? -1f : 1f;
         // snap further and faster on perfect
         targetPosition = homePosition + Vector3.right * sign * (dodgeSlideDistance * 1.5f);

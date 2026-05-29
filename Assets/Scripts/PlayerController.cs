@@ -23,6 +23,7 @@ public class PlayerController : MonoBehaviour
 
     private Action dodgeLeftHandler;
     private Action dodgeRightHandler;
+    private Action dodgeAllHandler;
 
     void Start()
     {
@@ -30,9 +31,11 @@ public class PlayerController : MonoBehaviour
 
         dodgeLeftHandler  = () => TryDodge(DodgeDirection.Left);
         dodgeRightHandler = () => TryDodge(DodgeDirection.Right);
+        dodgeAllHandler   = () => TryDodge(DodgeDirection.All);
 
         InputManager.Instance.OnDodgeLeft  += dodgeLeftHandler;
         InputManager.Instance.OnDodgeRight += dodgeRightHandler;
+        InputManager.Instance.OnDodgeAll   += dodgeAllHandler;
         InputManager.Instance.OnCounter    += TryCounter;
 
         CombatManager.Instance.OnPlayerHit   += TakeHit;
@@ -45,6 +48,7 @@ public class PlayerController : MonoBehaviour
         {
             InputManager.Instance.OnDodgeLeft  -= dodgeLeftHandler;
             InputManager.Instance.OnDodgeRight -= dodgeRightHandler;
+            InputManager.Instance.OnDodgeAll   -= dodgeAllHandler;
             InputManager.Instance.OnCounter    -= TryCounter;
         }
         if (CombatManager.Instance != null)

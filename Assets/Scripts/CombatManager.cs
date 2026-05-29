@@ -27,6 +27,7 @@ public class CombatManager : MonoBehaviour
     public event Action OnPlayerDeath;
     public event Action OnBossDefeated;
     public event Action OnFeintSwitch;   // boss flips the telegraphed direction mid-windup
+    public event Action OnSurgeTriggered; // surge attack accelerates mid-windup
 
     // Direction the boss is *currently telegraphing*. For a feint this starts as the
     // fake (opposite of requiredDodge) and flips to requiredDodge at feintSwitchPoint.
@@ -37,6 +38,9 @@ public class CombatManager : MonoBehaviour
     // normally, or doubleStrikeDelay for the second hit of a double strike.
     public float CurrentWindupDuration => currentTelegraphDuration;
 
+    // After a surge triggers, this is the multiplier tiles should apply to their fall speed.
+    public float SurgeFallSpeedMultiplier => surgeFallSpeedMult;
+
     [HideInInspector] public float attackImpactTime;
     private float stateEnterTime;
 
@@ -45,6 +49,11 @@ public class CombatManager : MonoBehaviour
     private float currentTelegraphDuration;
     private int   strikesRemaining;
     private bool  feintSwitched;
+
+    // Surge state
+    private bool  surgePending;       // true until the surge fires
+    private float surgePoint;         // random normalized time (0-1) when surge triggers
+    private float surgeFallSpeedMult; // how much the tile needs to speed up (exposed for RhythmLaneManager)
 
     [Header("Debug")]
     public bool showDebugOverlay = false;
@@ -60,6 +69,20 @@ public class CombatManager : MonoBehaviour
         CurrentAttack    = attack;
         strikesRemaining = (attack.attackType == AttackType.Double) ? 2 : 1;
         feintSwitched    = false;
+
+        // Surge: pick a random trigger point within the configured window
+        if (attack.attackType == AttackType.Surge)
+        {
+            surgePending      = true;
+            surgePoint        = UnityEngine.Random.Range(attack.surgeWindowStart, attack.surgeWindowEnd);
+            surgeFallSpeedMult = 1f;
+        }
+        else
+        {
+            surgePending      = false;
+            surgeFallSpeedMult = 1f;
+        }
+
         StartStrike(attack.telegraphDuration);
     }
 
@@ -97,7 +120,20 @@ public class CombatManager : MonoBehaviour
                     OnFeintSwitch?.Invoke();
                 }
 
-                if (elapsed >= currentTelegraphDuration)
+                // Surge: compress the remaining windup time at a random point
+                if (CurrentAttack.attackType == AttackType.Surge && surgePending &&
+                    elapsed >= currentTelegraphDuration * surgePoint)
+                {
+                    surgePending = false;
+                    float remaining = currentTelegraphDuration - elapsed;
+                    float compressed = remaining / CurrentAttack.surgeSpeedMultiplier;
+                    // Shift impact time forward so everything stays in sync
+                    attackImpactTime = Time.time + compressed;
+                    surgeFallSpeedMult = CurrentAttack.surgeSpeedMultiplier;
+                    OnSurgeTriggered?.Invoke();
+                }
+
+                if (Time.time >= attackImpactTime)
                     TransitionTo(CombatState.Active);
                 break;
 

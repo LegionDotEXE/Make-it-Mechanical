@@ -111,7 +111,30 @@ public class GameBootstrap : MonoBehaviour
         a9.recoveryDuration = 0.7f; a9.perfectWindowRadius = 0.10f;
         a9.requiredDodge = DodgeDirection.Left; a9.damageOnHit = 12f;
 
-        return new AttackData[] { a1, a2, a3, a4, a5, a6, a7, a8, a9 };
+        AttackData a10 = ScriptableObject.CreateInstance<AttackData>();
+        a10.name = "SurgeRight"; a10.attackType = AttackType.Surge;
+        a10.telegraphDuration = 1.8f; a10.activeDuration = 0.5f;
+        a10.recoveryDuration = 1.0f; a10.perfectWindowRadius = 0.12f;
+        a10.requiredDodge = DodgeDirection.Right; a10.damageOnHit = 28f;
+        a10.surgeWindowStart = 0.3f; a10.surgeWindowEnd = 0.65f;
+        a10.surgeSpeedMultiplier = 2.5f;
+
+        AttackData a11 = ScriptableObject.CreateInstance<AttackData>();
+        a11.name = "SurgeLeft"; a11.attackType = AttackType.Surge;
+        a11.telegraphDuration = 1.8f; a11.activeDuration = 0.5f;
+        a11.recoveryDuration = 1.0f; a11.perfectWindowRadius = 0.12f;
+        a11.requiredDodge = DodgeDirection.Left; a11.damageOnHit = 28f;
+        a11.surgeWindowStart = 0.3f; a11.surgeWindowEnd = 0.65f;
+        a11.surgeSpeedMultiplier = 2.5f;
+
+        // Combo: All (A+D+W) — the Overhead Slam
+        AttackData a12 = ScriptableObject.CreateInstance<AttackData>();
+        a12.name = "OverheadSlam"; a12.attackType = AttackType.Combo;
+        a12.telegraphDuration = 2.2f; a12.activeDuration = 0.7f;
+        a12.recoveryDuration = 1.5f; a12.perfectWindowRadius = 0.18f;
+        a12.requiredDodge = DodgeDirection.All; a12.damageOnHit = 45f;
+
+        return new AttackData[] { a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12 };
     }
 
     void CreateArena()
