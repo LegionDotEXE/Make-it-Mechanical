@@ -3,6 +3,9 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "NewAttack", menuName = "BossGame/AttackData")]
 public class AttackData : ScriptableObject
 {
+    [Header("Boss State")]
+    public BossState bossState = BossState.Attack1;
+
     [Header("Timing (seconds)")]
     [Tooltip("How long the boss winds up before the attack goes active.")]
     public float telegraphDuration = 1.2f;
@@ -32,4 +35,11 @@ public enum DodgeDirection
     Left,
     Right
     // could add Forward later if we want a third dodge type
+}
+
+public enum BossState
+{
+    Start,
+    Attack1,
+    Dash,
 }
