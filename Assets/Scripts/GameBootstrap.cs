@@ -92,7 +92,14 @@ public class GameBootstrap : MonoBehaviour
         a6.requiredDodge = DodgeDirection.Left; a6.damageOnHit = 15f;
         a6.doubleStrikeDelay = 0.24f;
 
-        return new AttackData[] { a1, a2, a3, a4, a5, a6 };
+        AttackData a7 = ScriptableObject.CreateInstance<AttackData>();
+        a7.name = "FeintLeft"; a7.attackType = AttackType.Feint;
+        a7.telegraphDuration = 1.3f; a7.activeDuration = 0.4f;
+        a7.recoveryDuration = 1.0f; a7.perfectWindowRadius = 0.10f;
+        a7.requiredDodge = DodgeDirection.Left;
+        a7.feintSwitchPoint = 0.45f; a7.damageOnHit = 25f;
+
+        return new AttackData[] { a1, a2, a3, a4, a5, a6, a7 };
     }
 
     void CreateArena()
