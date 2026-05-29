@@ -53,6 +53,7 @@ public class BossVisuals : MonoBehaviour
         CombatManager.Instance.OnStateChanged  += OnStateChanged;
         CombatManager.Instance.OnCounterLanded += OnCounterHit;
         CombatManager.Instance.OnBossDefeated  += OnDefeated;
+        CombatManager.Instance.OnFeintSwitch   += OnFeintSwitch;
     }
 
     void OnDestroy()
@@ -62,6 +63,7 @@ public class BossVisuals : MonoBehaviour
             CombatManager.Instance.OnStateChanged  -= OnStateChanged;
             CombatManager.Instance.OnCounterLanded -= OnCounterHit;
             CombatManager.Instance.OnBossDefeated  -= OnDefeated;
+            CombatManager.Instance.OnFeintSwitch   -= OnFeintSwitch;
         }
     }
 
@@ -215,7 +217,8 @@ public class BossVisuals : MonoBehaviour
         float baseScale = (atk.attackType == AttackType.Heavy) ? 2.0f : 1.2f;
         float maxScale  = (atk.attackType == AttackType.Heavy) ? 5.0f : 3.5f;
         float elapsed   = Time.time - GetWindupStart();
-        float chargeT   = Mathf.Clamp01(elapsed / atk.telegraphDuration);
+        float windupDur = CombatManager.Instance.CurrentWindupDuration;
+        float chargeT   = Mathf.Clamp01(elapsed / Mathf.Max(0.0001f, windupDur));
 
         dangerRing.transform.localScale = Vector3.one * Mathf.Lerp(baseScale, maxScale, chargeT);
 
@@ -230,15 +233,15 @@ public class BossVisuals : MonoBehaviour
         if (CombatManager.Instance.CurrentAttack == null) return;
 
         bool show = currentState == CombatState.Windup || currentState == CombatState.Active;
-        DodgeDirection dir = CombatManager.Instance.CurrentAttack.requiredDodge;
-        AttackType type    = CombatManager.Instance.CurrentAttack.attackType;
+        AttackType type = CombatManager.Instance.CurrentAttack.attackType;
 
-        DodgeDirection shownDir = dir;
-        if (type == AttackType.Feint && currentState == CombatState.Windup)
-            shownDir = (dir == DodgeDirection.Left) ? DodgeDirection.Right : DodgeDirection.Left;
+        // Source the arrow direction from CombatManager's live telegraph direction.
+        // For feints this is the fake until feintSwitchPoint, then the true direction,
+        // so the arrow actually flips mid-windup instead of lying for the whole telegraph.
+        DodgeDirection shownDir = CombatManager.Instance.CurrentTelegraphDirection;
 
-        telegraphLeft_GO.SetActive(show  && shownDir == DodgeDirection.Right);
-        telegraphRight_GO.SetActive(show && shownDir == DodgeDirection.Left);
+        telegraphLeft_GO.SetActive(show  && shownDir == DodgeDirection.Left);
+        telegraphRight_GO.SetActive(show && shownDir == DodgeDirection.Right);
 
         if (!show) return;
 
@@ -304,8 +307,8 @@ public class BossVisuals : MonoBehaviour
                     weaponRenderer.transform.localRotation = Quaternion.Euler(0, 0, sign * pullAngle);
                 }
 
-                if (atk?.attackType == AttackType.Feint)
-                    StartCoroutine(FeintEyeFlash());
+                // Feint eye flash is triggered by OnFeintSwitch now, so it lands exactly
+                // when the boss reveals the true direction rather than on a fixed delay.
                 break;
 
             case CombatState.Active:
@@ -371,10 +374,16 @@ public class BossVisuals : MonoBehaviour
         targetPosition = origin;
     }
 
+    void OnFeintSwitch()
+    {
+        if (isDefeated) return;
+        StartCoroutine(FeintEyeFlash());
+    }
+
     IEnumerator FeintEyeFlash()
     {
         if (eyeRenderers == null) yield break;
-        yield return new WaitForSeconds(0.2f);
+        // No leading delay - this fires the instant the boss commits to the real side.
         for (int i = 0; i < 3; i++)
         {
             foreach (var e in eyeRenderers)

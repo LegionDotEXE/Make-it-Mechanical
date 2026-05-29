@@ -33,6 +33,9 @@ public class BossController : MonoBehaviour
     private bool  combatRunning      = false;
     private float idleTimer          = 0f;
 
+    // Reused scratch instance for enraged attacks (instead of leaking a new SO each time).
+    private AttackData activeRageInstance;
+
     void Start()
     {
         currentHealth = maxHealth;
@@ -61,6 +64,9 @@ public class BossController : MonoBehaviour
             CombatManager.Instance.OnBossDefeated  -= HandleDefeated;
             CombatManager.Instance.OnPlayerDeath   -= HandlePlayerDied;
         }
+
+        if (activeRageInstance != null)
+            Destroy(activeRageInstance);
     }
 
     void Update()
@@ -92,7 +98,12 @@ public class BossController : MonoBehaviour
         AttackData next = src;
         if (isEnraged)
         {
-            AttackData rage = ScriptableObject.CreateInstance<AttackData>();
+            // Reuse one instance instead of allocating (and leaking) a new SO per attack.
+            // Safe because only one attack is ever active at a time.
+            if (activeRageInstance == null)
+                activeRageInstance = ScriptableObject.CreateInstance<AttackData>();
+
+            AttackData rage = activeRageInstance;
             rage.name                = src.name + "_RAGE";
             rage.attackType          = src.attackType;
             rage.telegraphDuration   = src.telegraphDuration  * rageSpeedMult;
@@ -101,6 +112,7 @@ public class BossController : MonoBehaviour
             rage.perfectWindowRadius = src.perfectWindowRadius;
             rage.requiredDodge       = src.requiredDodge;
             rage.feintSwitchPoint    = src.feintSwitchPoint;
+            rage.doubleStrikeDelay   = src.doubleStrikeDelay;   // was missing - double attacks fell back to default
             rage.damageOnHit         = src.damageOnHit * rageDamageMult;
             next = rage;
         }
