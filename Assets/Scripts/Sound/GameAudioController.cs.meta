@@ -1,0 +1,22 @@
+fileFormatVersion: 2
+guid: b34715c74eb8e7f46aa12904bbd6d55b
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - dodgeClip: {fileID: 8300000, guid: 57b7a659e9fc68f47b7514bea72a8c55, type: 3}
+  - perfectDodgeClip: {fileID: 8300000, guid: 1081601270571bd4a9c715d9b7241d54, type: 3}
+  - playerHit1: {fileID: 8300000, guid: 87b9c6cd78098da41b2930263535ed04, type: 3}
+  - playerHit2: {fileID: 8300000, guid: 5a36628388ab1ac44a2b8ca903084f09, type: 3}
+  - counterClip: {fileID: 8300000, guid: 638dbab752424c549a5cbb991659ff94, type: 3}
+  - deathClip: {fileID: 8300000, guid: f98bc426a5c237a42a8c9b466cbbe97c, type: 3}
+  - normalAttackClip: {fileID: 8300000, guid: 21561614b29d98e479acb0eabf659585, type: 3}
+  - feintAttackClip: {fileID: 8300000, guid: bce4c40737081f14b8758c7aceccde17, type: 3}
+  - heavyAttack1: {fileID: 8300000, guid: 3c63225a99dbedc4daf31478f6668790, type: 3}
+  - heavyAttack2: {fileID: 8300000, guid: 64567ed54d874db458e1eaeed948c999, type: 3}
+  - heavyWindup: {fileID: 8300000, guid: b690b01b854bab149894fb59ec8a9edd, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

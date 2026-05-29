@@ -47,6 +47,8 @@ public class GameBootstrap : MonoBehaviour
         new GameObject("RestartHandler").AddComponent<RestartHandler>();
 
         Debug.Log("[GameBootstrap] Ready. A=left D=right W=counter R=restart");
+
+        CreateAudioSystem();
     }
 
     AttackData[] CreateDefaultAttacks()
@@ -102,6 +104,27 @@ public class GameBootstrap : MonoBehaviour
         sr.sprite = PlayerVisuals.CreateRect(size.x, size.y);
         sr.color  = color;
         sr.sortingOrder = order;
+    }
+
+    void CreateAudioSystem()
+    {
+        GameObject audioGO = new GameObject("SoundManager");
+
+        SoundManager sm = audioGO.AddComponent<SoundManager>();
+
+        AudioSource musicSource = audioGO.AddComponent<AudioSource>();
+        AudioSource sfxSource = audioGO.AddComponent<AudioSource>();
+        AudioSource loopSource = audioGO.AddComponent<AudioSource>();
+
+        musicSource.playOnAwake = false;
+        sfxSource.playOnAwake = false;
+        loopSource.playOnAwake = false;
+
+        sm.musicSource = musicSource;
+        sm.sfxSource = sfxSource;
+        sm.loopSource = loopSource;
+
+        new GameObject("GameAudioController").AddComponent<GameAudioController>();
     }
 }
 
