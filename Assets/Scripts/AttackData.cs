@@ -1,45 +1,42 @@
 using UnityEngine;
 
+public enum DodgeDirection { Left, Right }
+
+public enum AttackType
+{
+    Normal,   // standard single hit, left or right
+    Feint,    // fakes one direction then switches to the other mid-windup
+    Heavy,    // slow windup, big damage, longer active window
+    Double    // two quick hits back to back, same direction both times
+}
+
 [CreateAssetMenu(fileName = "NewAttack", menuName = "BossGame/AttackData")]
 public class AttackData : ScriptableObject
 {
-    [Header("Boss State")]
-    public BossState bossState = BossState.Attack1;
+    [Header("Type")]
+    [Tooltip("Determines timing pattern and visual behavior.")]
+    public AttackType attackType = AttackType.Normal;
 
     [Header("Timing (seconds)")]
-    [Tooltip("How long the boss winds up before the attack goes active.")]
-    public float telegraphDuration = 1.2f;
-
-    [Tooltip("How long the hitbox is actually active / the dodge window is open.")]
-    public float activeDuration = 0.5f;
-
-    [Tooltip("How long the boss rests after the attack before the next one.")]
-    public float recoveryDuration = 1.0f;
+    public float telegraphDuration  = 1.2f;
+    public float activeDuration     = 0.5f;
+    public float recoveryDuration   = 1.0f;
 
     [Header("Timing Window")]
-    [Tooltip("Seconds on either side of impact that count as a perfect dodge.")]
+    [Tooltip("Seconds either side of impact that count as a perfect dodge.")]
     public float perfectWindowRadius = 0.12f;
 
     [Header("Direction")]
-    [Tooltip("Which direction the player must dodge to avoid this attack.")]
     public DodgeDirection requiredDodge = DodgeDirection.Left;
 
+    [Header("Feint (only used if attackType = Feint)")]
+    [Tooltip("How far into the telegraph (0-1) the boss fakes the switch.")]
+    public float feintSwitchPoint = 0.55f;
+
+    [Header("Double Strike (only used if attackType = Double)")]
+    [Tooltip("Delay between first and second hit in a double strike.")]
+    public float doubleStrikeDelay = 0.28f;
+
     [Header("Damage")]
-    [Tooltip("How much health the player loses if they don't dodge.")]
     public float damageOnHit = 20f;
-}
-
-// kept here since it's tightly coupled to AttackData
-public enum DodgeDirection
-{
-    Left,
-    Right
-    // could add Forward later if we want a third dodge type
-}
-
-public enum BossState
-{
-    Start,
-    Attack1,
-    Dash,
 }

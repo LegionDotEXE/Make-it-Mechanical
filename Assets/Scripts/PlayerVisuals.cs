@@ -1,31 +1,44 @@
+using System.Collections;
 using UnityEngine;
 
-/// <summary>
-/// Handles all player visual feedback: sprite, dodge slide, hit flash, death fade.
-/// Attach to the Player GameObject (GameBootstrap does this automatically).
-/// </summary>
 public class PlayerVisuals : MonoBehaviour
 {
     [Header("References (auto-created if null)")]
     public SpriteRenderer bodyRenderer;
     public SpriteRenderer shieldRenderer;
+    public SpriteRenderer headRenderer;
 
-    [Header("Colors (dimmed — backdrop behind rhythm lanes)")]
-    public Color idleColor      = new Color(0.55f, 0.52f, 0.48f, 0.5f);  // ashen grey, dimmed
-    public Color dodgeColor     = new Color(0.3f,  0.45f, 0.7f,  0.6f);  // spectral blue
-    public Color perfectColor   = new Color(0.8f,  0.7f,  0.15f, 0.7f);  // gold flash
-    public Color hitColor       = new Color(0.7f,  0.1f,  0.08f, 0.7f);  // blood red
-    public Color shieldColor    = new Color(0.4f,  0.35f, 0.28f, 0.4f);  // dark iron
+    [Header("Colors")]
+    public Color idleColor    = new Color(0.55f, 0.52f, 0.48f, 0.85f);
+    public Color dodgeColor   = new Color(0.3f,  0.5f,  0.9f,  1f);
+    public Color perfectColor = new Color(1f,    0.85f, 0.15f, 1f);
+    public Color hitColor     = new Color(0.9f,  0.1f,  0.08f, 1f);
+    public Color shieldColor  = new Color(0.45f, 0.4f,  0.32f, 0.9f);
+    public Color counterColor = new Color(1f,    0.9f,  0.3f,  1f);
 
     [Header("Dodge Animation")]
-    public float dodgeSlideDistance = 1.5f;
-    public float dodgeSlideSpeed   = 12f;
+    public float dodgeSlideDistance = 1.8f;
+    public float dodgeSlideSpeed    = 16f;
+
+    // child renderers we track for multi-part flash
+    private SpriteRenderer[] allRenderers;
 
     private Vector3 homePosition;
     private Vector3 targetPosition;
     private float flashTimer;
     private Color flashColor;
     private bool isDead;
+
+    // ghost trail
+    private float ghostTimer;
+    private const int GHOST_COUNT = 3;
+    private GameObject[] ghosts;
+
+    // idle breathing
+    private float breathTimer;
+
+    // boss direction for counter lunge
+    private Vector3 bossDirection = Vector3.up;
 
     void Start()
     {
@@ -35,7 +48,17 @@ public class PlayerVisuals : MonoBehaviour
         homePosition   = transform.position;
         targetPosition = homePosition;
 
-        // subscribe to combat events
+        // build ghost trail objects
+        BuildGhosts();
+
+        // find boss for lunge direction
+        GameObject boss = GameObject.Find("Boss");
+        if (boss != null)
+            bossDirection = (boss.transform.position - transform.position).normalized;
+
+        // cache all child renderers for full-body flash
+        allRenderers = GetComponentsInChildren<SpriteRenderer>();
+
         CombatManager.Instance.OnPlayerDodgedSuccessfully += OnDodge;
         CombatManager.Instance.OnPlayerPerfectDodge       += OnPerfectDodge;
         CombatManager.Instance.OnPlayerHit                += OnHit;
@@ -61,61 +84,145 @@ public class PlayerVisuals : MonoBehaviour
     {
         if (isDead) return;
 
-        // slide toward target position (dodge or return home)
+        // smooth slide
         transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * dodgeSlideSpeed);
 
-        // flash timer
+        // color flash lerp back to idle
         if (flashTimer > 0f)
         {
             flashTimer -= Time.deltaTime;
-            float t = flashTimer / 0.25f;
-            bodyRenderer.color = Color.Lerp(idleColor, flashColor, t);
+            float t = Mathf.Clamp01(flashTimer / 0.25f);
+            Color c = Color.Lerp(idleColor, flashColor, t);
+            if (bodyRenderer != null) bodyRenderer.color = c;
+            if (headRenderer  != null) headRenderer.color  = c;
         }
+
+        // idle breathing — subtle scale pulse so the character feels alive
+        breathTimer += Time.deltaTime * 1.4f;
+        float breath = 1f + Mathf.Sin(breathTimer) * 0.012f;
+        transform.localScale = new Vector3(breath, 1f / breath, 1f); // squash-and-stretch
+
+        // ghost trail update
+        UpdateGhosts();
     }
+
+    // ---- sprite creation ----
 
     void CreatePlayerSprite()
     {
-        // body - a tall rectangle representing the knight
+        // body
         GameObject body = new GameObject("Body");
         body.transform.SetParent(transform, false);
-        body.transform.localPosition = Vector3.zero;
 
         bodyRenderer = body.AddComponent<SpriteRenderer>();
-        bodyRenderer.sprite = CreateRect(0.6f, 1.2f);
+        bodyRenderer.sprite = CreateRect(0.65f, 1.3f);
         bodyRenderer.color  = idleColor;
-        bodyRenderer.sortingOrder = 1;
+        bodyRenderer.sortingOrder = 5;
 
-        // shield - small square on the side
+        // legs — two thin rectangles that give a stance feel
+        CreateLimb("LegL", new Vector3(-0.18f, -0.75f, 0f), new Vector3(0.18f, 0.45f, 1f), idleColor, 4);
+        CreateLimb("LegR", new Vector3( 0.18f, -0.75f, 0f), new Vector3(0.18f, 0.45f, 1f), idleColor, 4);
+
+        // arm holding shield
+        CreateLimb("ArmL", new Vector3(-0.38f, 0.1f, 0f), new Vector3(0.15f, 0.55f, 1f),
+            new Color(0.5f, 0.45f, 0.38f, 0.9f), 6);
+
+        // shield
         GameObject shield = new GameObject("Shield");
         shield.transform.SetParent(transform, false);
-        shield.transform.localPosition = new Vector3(-0.25f, -0.1f, 0f);
+        shield.transform.localPosition = new Vector3(-0.52f, 0.05f, 0f);
 
         shieldRenderer = shield.AddComponent<SpriteRenderer>();
-        shieldRenderer.sprite = CreateRect(0.15f, 0.4f);
+        shieldRenderer.sprite = CreateRect(0.18f, 0.55f);
         shieldRenderer.color  = shieldColor;
-        shieldRenderer.sortingOrder = 2;
+        shieldRenderer.sortingOrder = 7;
 
-        // head - small circle on top
+        // head
         GameObject head = new GameObject("Head");
         head.transform.SetParent(transform, false);
-        head.transform.localPosition = new Vector3(0f, 0.75f, 0f);
+        head.transform.localPosition = new Vector3(0f, 0.85f, 0f);
 
-        SpriteRenderer headRenderer = head.AddComponent<SpriteRenderer>();
-        headRenderer.sprite = CreateCircle(0.18f);
-        headRenderer.color  = idleColor;
-        headRenderer.sortingOrder = 2;
+        headRenderer = head.AddComponent<SpriteRenderer>();
+        headRenderer.sprite = CreateCircle(0.22f);
+        headRenderer.color  = new Color(0.5f, 0.47f, 0.42f, 0.9f);
+        headRenderer.sortingOrder = 6;
+
+        // visor slit — gives a knight feel
+        GameObject visor = new GameObject("Visor");
+        visor.transform.SetParent(transform, false);
+        visor.transform.localPosition = new Vector3(0.06f, 0.88f, 0f);
+
+        SpriteRenderer visorSR = visor.AddComponent<SpriteRenderer>();
+        visorSR.sprite = CreateRect(0.18f, 0.06f);
+        visorSR.color  = new Color(0.15f, 0.12f, 0.08f, 1f);
+        visorSR.sortingOrder = 8;
     }
+
+    void CreateLimb(string name, Vector3 pos, Vector3 scale, Color color, int sortOrder)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(transform, false);
+        go.transform.localPosition = pos;
+        go.transform.localScale    = scale;
+
+        SpriteRenderer sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = CreateRect(1f, 1f);
+        sr.color  = color;
+        sr.sortingOrder = sortOrder;
+    }
+
+    // ---- ghost trail ----
+
+    void BuildGhosts()
+    {
+        ghosts = new GameObject[GHOST_COUNT];
+        for (int i = 0; i < GHOST_COUNT; i++)
+        {
+            GameObject g = new GameObject($"Ghost_{i}");
+            g.transform.SetParent(transform.parent, false);
+
+            SpriteRenderer sr = g.AddComponent<SpriteRenderer>();
+            sr.sprite = CreateRect(0.65f, 1.3f);
+            sr.color  = Color.clear;
+            sr.sortingOrder = 3;
+
+            ghosts[i] = g;
+            g.SetActive(false);
+        }
+    }
+
+    void UpdateGhosts()
+    {
+        // only show ghosts while dodging (when we're away from home)
+        float distFromHome = Vector3.Distance(transform.position, homePosition);
+        bool isDodging = distFromHome > 0.15f;
+
+        for (int i = 0; i < GHOST_COUNT; i++)
+        {
+            if (!isDodging) { ghosts[i].SetActive(false); continue; }
+
+            ghosts[i].SetActive(true);
+            // space ghosts behind the player in the direction of travel
+            Vector3 dir = (homePosition - transform.position).normalized;
+            ghosts[i].transform.position = transform.position + dir * (i + 1) * 0.22f;
+
+            float alpha = (1f - (float)(i + 1) / (GHOST_COUNT + 1)) * 0.35f;
+            SpriteRenderer sr = ghosts[i].GetComponent<SpriteRenderer>();
+            Color gc = (CombatManager.Instance.CurrentState == CombatState.PerfectWindow)
+                ? perfectColor : dodgeColor;
+            sr.color = new Color(gc.r, gc.g, gc.b, alpha);
+        }
+    }
+
+    // ---- event handlers ----
 
     void OnDodge()
     {
         if (isDead) return;
         DodgeDirection dir = CombatManager.Instance.CurrentAttack.requiredDodge;
         float sign = (dir == DodgeDirection.Left) ? -1f : 1f;
-        // dodge in the required direction (away from attack)
         targetPosition = homePosition + Vector3.right * sign * dodgeSlideDistance;
-        Flash(dodgeColor);
-
-        // return home after a moment
+        FlashAll(dodgeColor);
         CancelInvoke(nameof(ReturnHome));
         Invoke(nameof(ReturnHome), 0.35f);
     }
@@ -125,40 +232,68 @@ public class PlayerVisuals : MonoBehaviour
         if (isDead) return;
         DodgeDirection dir = CombatManager.Instance.CurrentAttack.requiredDodge;
         float sign = (dir == DodgeDirection.Left) ? -1f : 1f;
-        targetPosition = homePosition + Vector3.right * sign * dodgeSlideDistance;
-        Flash(perfectColor);
-
-        // hold position longer for counter window
+        // snap further and faster on perfect
+        targetPosition = homePosition + Vector3.right * sign * (dodgeSlideDistance * 1.5f);
+        FlashAll(perfectColor);
+        // squash on perfect dodge impact
+        StartCoroutine(PerfectSquash());
         CancelInvoke(nameof(ReturnHome));
-        Invoke(nameof(ReturnHome), 0.6f);
+        Invoke(nameof(ReturnHome), 0.65f);
+    }
+
+    IEnumerator PerfectSquash()
+    {
+        // quick squash-stretch punch on perfect
+        float t = 0f;
+        while (t < 0.12f)
+        {
+            t += Time.deltaTime;
+            float s = 1f + Mathf.Sin(t / 0.12f * Mathf.PI) * 0.25f;
+            transform.localScale = new Vector3(1f / s, s, 1f);
+            yield return null;
+        }
     }
 
     void OnCounter()
     {
         if (isDead) return;
-        // quick lunge forward
-        Flash(perfectColor);
-        targetPosition = homePosition + Vector3.up * 0.5f;
+        FlashAll(counterColor);
+        targetPosition = homePosition + bossDirection * 0.7f;
+        StartCoroutine(CounterBurst());
         CancelInvoke(nameof(ReturnHome));
-        Invoke(nameof(ReturnHome), 0.3f);
+        Invoke(nameof(ReturnHome), 0.22f);
+    }
+
+    IEnumerator CounterBurst()
+    {
+        // quick scale punch on counter hit
+        float t = 0f;
+        while (t < 0.15f)
+        {
+            t += Time.deltaTime;
+            float s = 1f + Mathf.Sin(t / 0.15f * Mathf.PI) * 0.3f;
+            transform.localScale = new Vector3(s, s, 1f);
+            yield return null;
+        }
+        transform.localScale = Vector3.one;
     }
 
     void OnHit()
     {
         if (isDead) return;
-        Flash(hitColor);
-
-        // screen shake effect via small position jitter
+        FlashAll(hitColor);
         StartCoroutine(HitShake());
     }
 
-    System.Collections.IEnumerator HitShake()
+    IEnumerator HitShake()
     {
+        // shake and red flash together
         Vector3 original = homePosition;
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 8; i++)
         {
-            transform.position = original + (Vector3)Random.insideUnitCircle * 0.15f;
-            yield return new WaitForSeconds(0.03f);
+            float intensity = Mathf.Lerp(0.25f, 0.05f, (float)i / 8f);
+            transform.position = original + (Vector3)Random.insideUnitCircle * intensity;
+            yield return new WaitForSeconds(0.025f);
         }
         transform.position = original;
         targetPosition = homePosition;
@@ -167,51 +302,62 @@ public class PlayerVisuals : MonoBehaviour
     void OnDeath()
     {
         isDead = true;
-        bodyRenderer.color = new Color(0.3f, 0.05f, 0.05f, 0.5f);
-        if (shieldRenderer != null)
-            shieldRenderer.color = new Color(0.2f, 0.2f, 0.2f, 0.3f);
 
-        // fall over
-        StartCoroutine(DeathFall());
+        // hide ghosts
+        foreach (var g in ghosts) if (g != null) g.SetActive(false);
+
+        // darken all parts
+        foreach (var sr in allRenderers)
+            sr.color = new Color(0.25f, 0.04f, 0.04f, 0.8f);
+
+        StartCoroutine(DeathSequence());
     }
 
-    System.Collections.IEnumerator DeathFall()
+    IEnumerator DeathSequence()
     {
+        // fall and fade
         float t = 0f;
-        Quaternion start = transform.rotation;
-        Quaternion end   = Quaternion.Euler(0, 0, -90f);
-        while (t < 1f)
+        Quaternion startRot = transform.rotation;
+        Quaternion endRot   = Quaternion.Euler(0, 0, -90f);
+        Vector3 startPos    = transform.position;
+
+        while (t < 1.2f)
         {
-            t += Time.deltaTime * 2f;
-            transform.rotation = Quaternion.Lerp(start, end, t);
+            t += Time.deltaTime * 0.9f;
+            float ease = 1f - Mathf.Pow(1f - Mathf.Clamp01(t), 3f); // ease-out cubic
+            transform.rotation = Quaternion.Lerp(startRot, endRot, ease);
+            // sink slightly as falling
+            transform.position = startPos + Vector3.down * ease * 0.3f;
+            // fade out
+            float alpha = Mathf.Lerp(0.8f, 0f, Mathf.Clamp01(t - 0.5f));
+            foreach (var sr in allRenderers)
+            {
+                Color c = sr.color;
+                c.a = alpha;
+                sr.color = c;
+            }
             yield return null;
         }
     }
 
     void OnStateChanged(CombatState state)
     {
-        // pulse the shield when in counter window
         if (shieldRenderer == null) return;
-
-        if (state == CombatState.PerfectWindow)
-            shieldRenderer.color = perfectColor;
-        else
-            shieldRenderer.color = shieldColor;
+        // gold shield pulse when counter window is open
+        shieldRenderer.color = (state == CombatState.PerfectWindow) ? perfectColor : shieldColor;
     }
 
-    void ReturnHome()
-    {
-        targetPosition = homePosition;
-    }
+    void ReturnHome() => targetPosition = homePosition;
 
-    void Flash(Color color)
+    void FlashAll(Color color)
     {
         flashColor = color;
         flashTimer = 0.25f;
-        bodyRenderer.color = color;
+        if (bodyRenderer != null) bodyRenderer.color = color;
+        if (headRenderer  != null) headRenderer.color  = color;
     }
 
-    // ---- sprite generation helpers ----
+    // ---- sprite helpers ----
 
     public static Sprite CreateRect(float w, float h)
     {
@@ -220,8 +366,7 @@ public class PlayerVisuals : MonoBehaviour
         Texture2D tex = new Texture2D(pw, ph);
         tex.filterMode = FilterMode.Point;
         Color[] pixels = new Color[pw * ph];
-        for (int i = 0; i < pixels.Length; i++)
-            pixels[i] = Color.white;
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = Color.white;
         tex.SetPixels(pixels);
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, pw, ph), new Vector2(0.5f, 0.5f), 64f);
