@@ -1,19 +1,29 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
+
 public class PlayerController : MonoBehaviour
 {
     [Header("Health")]
-    public float maxHealth = 100f;
-    public float currentHealth { get; private set; }
+    public float maxHealth       = 100f;
+    public float currentHealth   { get; private set; }
 
-    [Header("Events - hook UI here (Tommy)")]
-    public UnityEvent<float> OnHealthChanged;
+    [Header("Hit Stagger")]
+    [Tooltip("Seconds after a hit where the player cannot be hit again.")]
+    public float invincibilityDuration = 0.6f;
+    private bool isInvincible = false;
+    private bool isDead       = false;
+
+    [Header("Events — hook UI here (Tommy)")]
+    public UnityEvent<float> OnHealthChanged;   // 0-1 normalized
+    public UnityEvent<float> OnHealthChangedRaw; // actual HP value, for damage numbers
     public UnityEvent OnDeath;
     public UnityEvent OnDodge;
     public UnityEvent OnPerfectDodge;
+    public UnityEvent OnHitWhileInvincible;     // optional: flash "IMMUNE" or similar
 
-    // cached delegates so we can properly unsubscribe
+    // cached delegates for clean unsubscribe
     private Action dodgeLeftHandler;
     private Action dodgeRightHandler;
 
@@ -28,8 +38,8 @@ public class PlayerController : MonoBehaviour
         InputManager.Instance.OnDodgeRight += dodgeRightHandler;
         InputManager.Instance.OnCounter    += TryCounter;
 
-        CombatManager.Instance.OnPlayerHit     += TakeHit;
-        CombatManager.Instance.OnPlayerDeath   += HandleDeath;
+        CombatManager.Instance.OnPlayerHit   += TakeHit;
+        CombatManager.Instance.OnPlayerDeath += HandleDeath;
     }
 
     void OnDestroy()
@@ -47,19 +57,13 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-
     void TryDodge(DodgeDirection dir)
     {
+        if (isDead) return;
+
         bool dodged = CombatManager.Instance.TryDodge(dir);
+        if (!dodged) return;
 
-        if (!dodged)
-        {
-            // wrong timing or wrong direction - could show "MISS" feedback here
-            Debug.Log("[Player] dodge failed - wrong direction or bad timing");
-            return;
-        }
-
-        // fire events for animation / UI
         if (CombatManager.Instance.CurrentState == CombatState.PerfectWindow)
             OnPerfectDodge?.Invoke();
         else
@@ -68,29 +72,56 @@ public class PlayerController : MonoBehaviour
 
     void TryCounter()
     {
+        if (isDead) return;
         CombatManager.Instance.TryCounter();
-        // animation trigger would go here
     }
 
     void TakeHit()
     {
-        if (CombatManager.Instance.CurrentAttack == null) return;
+        if (isDead) return;
 
-        currentHealth -= CombatManager.Instance.CurrentAttack.damageOnHit;
+        // invincibility window — no double-hits during recovery
+        if (isInvincible)
+        {
+            OnHitWhileInvincible?.Invoke();
+            Debug.Log("[Player] hit blocked by invincibility");
+            return;
+        }
+
+        float damage = CombatManager.Instance.CurrentAttack?.damageOnHit ?? 20f;
+        currentHealth -= damage;
         currentHealth  = Mathf.Max(currentHealth, 0f);
 
         OnHealthChanged?.Invoke(currentHealth / maxHealth);
+        OnHealthChangedRaw?.Invoke(currentHealth);
 
-        Debug.Log($"[Player] took hit - health: {currentHealth}/{maxHealth}");
+        Debug.Log($"[Player] hit for {damage} — HP: {currentHealth}/{maxHealth}");
 
         if (currentHealth <= 0f)
+        {
             CombatManager.Instance.NotifyPlayerDeath();
+            return;
+        }
+
+        // start invincibility window so next attack can't chain-kill
+        StartCoroutine(InvincibilityWindow());
+    }
+
+    IEnumerator InvincibilityWindow()
+    {
+        isInvincible = true;
+        yield return new WaitForSeconds(invincibilityDuration);
+        isInvincible = false;
     }
 
     void HandleDeath()
     {
+        isDead = true;
+        isInvincible = true; // no more hits after death
         OnDeath?.Invoke();
         Debug.Log("[Player] died");
-        // trigger game over screen here
     }
+
+    // read-only access for UI
+    public float HealthNormalized => currentHealth / maxHealth;
 }

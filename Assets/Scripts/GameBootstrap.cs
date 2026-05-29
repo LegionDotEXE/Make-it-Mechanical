@@ -2,13 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
-/// <summary>
-/// Drop this on an empty GameObject in your scene. It spawns all the managers,
-/// the player, the boss, the UI, and the arena background — everything needed
-/// to hit Play and test combat.
-///
-/// Assign at least one AttackData asset in the Inspector (or it creates a default).
-/// </summary>
+
 public class GameBootstrap : MonoBehaviour
 {
     [Header("Attack Data (assign BossAttack_01 etc.)")]
@@ -26,10 +20,8 @@ public class GameBootstrap : MonoBehaviour
 
     void Awake()
     {
-        // --- 1. Arena background ---
         CreateArena();
 
-        // --- 2. Camera setup ---
         Camera cam = Camera.main;
         if (cam != null)
         {
@@ -87,6 +79,18 @@ public class GameBootstrap : MonoBehaviour
         bc.OnBossHealthChanged.AddListener(ui.UpdateBossHealth);
         PlayerController pc = player.GetComponent<PlayerController>();
         pc.OnHealthChanged.AddListener(ui.UpdatePlayerHealth);
+        CombatManager.Instance.OnPlayerHit += () => {
+            ui.SpawnDamageNumber(
+                CombatManager.Instance.CurrentAttack?.damageOnHit ?? 20f,
+                player.transform.position + Vector3.up * 1.2f,
+                false);
+        };
+        CombatManager.Instance.OnCounterLanded += () => {
+            ui.SpawnDamageNumber(
+                bc.counterDamage,
+                boss.transform.position + Vector3.up * 1.5f,
+                true);
+        };
 
         gameObject.AddComponent<RestartHandler>();
         gameObject.AddComponent<CameraEffects>();
