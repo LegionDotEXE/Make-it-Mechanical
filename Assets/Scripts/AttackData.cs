@@ -4,10 +4,11 @@ public enum DodgeDirection { Left, Right }
 
 public enum AttackType
 {
-    Normal,   // standard single hit, left or right
-    Feint,    // fakes one direction then switches to the other mid-windup
-    Heavy,    // slow windup, big damage, longer active window
-    Double    // two quick hits back to back, same direction both times
+    Normal,       // standard single hit, left or right
+    Feint,        // fakes one direction then switches to the other mid-windup
+    Heavy,        // slow windup, big damage, longer active window
+    Double,       // two quick hits back to back, same direction both times
+    Unblockable   // cannot be dodged - must be PARRIED with the counter key (W) on time
 }
 
 [CreateAssetMenu(fileName = "NewAttack", menuName = "BossGame/AttackData")]
@@ -23,7 +24,7 @@ public class AttackData : ScriptableObject
     public float recoveryDuration   = 1.0f;
 
     [Header("Timing Window")]
-    [Tooltip("Seconds either side of impact that count as a perfect dodge.")]
+    [Tooltip("Seconds either side of impact that count as a perfect dodge / parry.")]
     public float perfectWindowRadius = 0.12f;
 
     [Header("Direction")]
@@ -39,4 +40,8 @@ public class AttackData : ScriptableObject
 
     [Header("Damage")]
     public float damageOnHit = 20f;
+
+    [Header("Unblockable (only used if attackType = Unblockable)")]
+    [Tooltip("Damage if the player fails to parry. Usually higher than damageOnHit.")]
+    public float unblockableDamage = 35f;
 }

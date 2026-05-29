@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Events;
 
 public class BossVisuals : MonoBehaviour
 {
@@ -17,7 +18,8 @@ public class BossVisuals : MonoBehaviour
     private Color counterHitColor = new Color(1f,    0.95f, 0.3f,  1f);
     private Color staggerColor    = new Color(0.7f,  0.6f,  0.2f,  1f);
     private Color heavyColor      = new Color(0.5f,  0.03f, 0.03f, 1f);
-    private Color feintColor      = new Color(0.4f,  0.1f,  0.5f,  1f); 
+    private Color feintColor      = new Color(0.4f,  0.1f,  0.5f,  1f);
+    private Color unblockableColor = new Color(0.85f, 0.85f, 0.85f, 1f);
 
     // telegraph
     private GameObject telegraphLeft_GO;
@@ -31,21 +33,50 @@ public class BossVisuals : MonoBehaviour
     private GameObject attackTypeIndicator;
     private SpriteRenderer attackTypeIndicatorSR;
 
+    // aura + slash fx
+    private SpriteRenderer auraSR;
+    private GameObject slashGO;
+    private SpriteRenderer slashSR;
+
+    // ---- layered motion state ----
     private Vector3 homePosition;
-    private Vector3 targetPosition;
-    private float   lungeSpeed   = 14f;
+    private Vector3 smoothPos;          // critically-damped base position
+    private Vector3 posVel;
+    private Vector3 lungeOffset;        // where the body wants to be relative to home
+    private Vector3 shakeOffset;        // additive impact shake, decays to zero
+    private float   posSmoothTime = 0.09f;
+    private const float idleSmoothTime = 0.09f;
+
+    private float swayTimer;
+    private float breathTimer;
+    private float scalePunch = 1f;      // coroutine-driven scale pop, multiplied onto breathing
+
+    // weapon swing (smoothly arced, not snapped)
+    private float weaponAngle = 30f;
+    private float weaponTargetAngle = 30f;
+    private float weaponTurnSpeed = 200f;
+
     private CombatState currentState = CombatState.Idle;
     private bool isDefeated;
-    private float swayTimer;
+
+    // phase escalation
+    private bool isEnraged;
+    private bool isFinal;
+    private BossController boss;
+
+    private float windupStartTime;
+    float GetWindupStart() => windupStartTime;
 
     void Start()
     {
         if (bodyRenderer == null) CreateBossSprite();
 
         homePosition   = transform.position;
-        targetPosition = homePosition;
+        smoothPos      = homePosition;
         allRenderers   = GetComponentsInChildren<SpriteRenderer>();
 
+        CreateAura();
+        CreateSlash();
         CreateTelegraphIndicators();
         CreateDangerRing();
         CreateAttackTypeIndicator();
@@ -54,6 +85,13 @@ public class BossVisuals : MonoBehaviour
         CombatManager.Instance.OnCounterLanded += OnCounterHit;
         CombatManager.Instance.OnBossDefeated  += OnDefeated;
         CombatManager.Instance.OnFeintSwitch   += OnFeintSwitch;
+
+        boss = GetComponent<BossController>();
+        if (boss != null)
+        {
+            boss.OnRageEntered.AddListener(OnRage);
+            boss.OnFinalPhaseEntered.AddListener(OnFinal);
+        }
     }
 
     void OnDestroy()
@@ -65,37 +103,112 @@ public class BossVisuals : MonoBehaviour
             CombatManager.Instance.OnBossDefeated  -= OnDefeated;
             CombatManager.Instance.OnFeintSwitch   -= OnFeintSwitch;
         }
+        if (boss != null)
+        {
+            boss.OnRageEntered.RemoveListener(OnRage);
+            boss.OnFinalPhaseEntered.RemoveListener(OnFinal);
+        }
     }
 
     void Update()
     {
         if (isDefeated) return;
+        float dt = Time.deltaTime;
 
-        transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * lungeSpeed);
+        // ---- idle life: sway + breathing, faster/wilder as the fight escalates ----
+        float swaySpeed   = isFinal ? 1.9f : isEnraged ? 1.4f : 0.8f;
+        float breathSpeed = isFinal ? 2.4f : isEnraged ? 1.8f : 1.3f;
+        float swayAmp     = isFinal ? 1.3f : isEnraged ? 0.85f : 0.45f;
+        swayTimer   += dt * swaySpeed;
+        breathTimer += dt * breathSpeed;
 
-        swayTimer += Time.deltaTime * 0.8f;
-        transform.rotation = Quaternion.Euler(0, 0, Mathf.Sin(swayTimer) * 0.45f);
+        // ---- windup buildup (anticipation, body swell, charging eyes) ----
+        if (currentState == CombatState.Windup) UpdateWindupVisuals();
+        else                                    UpdateIdleEyes();
 
-        if (currentState == CombatState.Windup && bodyRenderer != null)
-        {
-            AttackData atk = CombatManager.Instance.CurrentAttack;
-            float baseSpeed = (atk?.attackType == AttackType.Heavy) ? 3f : 7f;
-            float pulse = (Mathf.Sin(Time.time * baseSpeed) + 1f) / 2f;
-            Color target = (atk?.attackType == AttackType.Heavy) ? heavyColor :
-                           (atk?.attackType == AttackType.Feint)  ? feintColor : windupColor;
-            bodyRenderer.color = Color.Lerp(idleColor, target, pulse);
+        // ---- weapon swing: arc toward its target angle instead of snapping ----
+        weaponAngle = Mathf.MoveTowardsAngle(weaponAngle, weaponTargetAngle, weaponTurnSpeed * dt);
+        if (weaponRenderer)
+            weaponRenderer.transform.localRotation = Quaternion.Euler(0, 0, weaponAngle);
 
-            if (eyeRenderers != null)
-                foreach (var eye in eyeRenderers)
-                    eye.color = Color.Lerp(
-                        new Color(1f, 0.3f, 0.1f, 0.6f),
-                        new Color(1f, 0.7f, 0.1f, 1f), pulse);
+        // ---- position: smoothed base + decaying shake + breathing bob ----
+        posSmoothTime = Mathf.MoveTowards(posSmoothTime, idleSmoothTime, dt * 0.4f);
+        smoothPos     = Vector3.SmoothDamp(smoothPos, homePosition + lungeOffset, ref posVel, posSmoothTime);
+        shakeOffset   = Vector3.Lerp(shakeOffset, Vector3.zero, dt * 12f);
+        float bob     = Mathf.Sin(breathTimer) * 0.05f;
+        transform.position = smoothPos + shakeOffset + new Vector3(0f, bob, 0f);
 
-            UpdateDangerRing(atk);
-        }
+        // ---- breathing squash-and-stretch (times any active scale pop) ----
+        float breath = 1f + Mathf.Sin(breathTimer) * 0.025f;
+        transform.localScale = new Vector3(breath * scalePunch, (1f / breath) * scalePunch, 1f);
+        transform.rotation   = Quaternion.Euler(0f, 0f, Mathf.Sin(swayTimer) * swayAmp);
 
+        UpdateAura();
         UpdateTelegraph();
     }
+
+    void UpdateWindupVisuals()
+    {
+        AttackData atk = CombatManager.Instance.CurrentAttack;
+        if (atk == null) return;
+
+        float windupDur = CombatManager.Instance.CurrentWindupDuration;
+        float charge    = Mathf.Clamp01((Time.time - windupStartTime) / Mathf.Max(0.0001f, windupDur));
+        float eased     = charge * charge;
+
+        float pulseSpeed = (atk.attackType == AttackType.Heavy) ? 4f : 8f;
+        float pulse      = (Mathf.Sin(Time.time * pulseSpeed) + 1f) / 2f;
+
+        Color target = (atk.attackType == AttackType.Heavy)       ? heavyColor :
+                       (atk.attackType == AttackType.Feint)       ? feintColor :
+                       (atk.attackType == AttackType.Unblockable) ? unblockableColor : windupColor;
+
+        if (bodyRenderer != null)
+            bodyRenderer.color = Color.Lerp(IdleTint(), target, Mathf.Max(pulse * 0.7f, eased));
+
+        if (eyeRenderers != null)
+        {
+            Color dim    = new Color(1f, 0.3f, 0.1f, 0.6f);
+            Color bright = new Color(1f, 0.8f, 0.15f, 1f);
+            float t = Mathf.Max(pulse, eased);
+            foreach (var eye in eyeRenderers)
+            {
+                eye.color = Color.Lerp(dim, bright, t);
+                eye.transform.localScale = Vector3.one * Mathf.Lerp(1f, 1.6f, eased);
+            }
+        }
+
+        // anticipation: pull up/back over the last ~45% of the windup before striking
+        float anticip = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.55f, 1f, charge));
+        lungeOffset = Vector3.up * anticip * 0.3f;
+
+        UpdateDangerRing(atk);
+    }
+
+    void UpdateIdleEyes()
+    {
+        if (eyeRenderers == null) return;
+        // between attacks the eyes smoulder; brighter and pulsing once enraged
+        float p = (Mathf.Sin(Time.time * (isFinal ? 7f : 4f)) + 1f) / 2f;
+        Color lo, hi;
+        if (isFinal)      { lo = new Color(1f, 0.5f, 0.15f, 0.8f); hi = new Color(1f, 0.9f, 0.4f, 1f); }
+        else if (isEnraged){ lo = new Color(1f, 0.3f, 0.1f, 0.7f); hi = new Color(1f, 0.55f, 0.15f, 1f); }
+        else              { lo = new Color(1f, 0.3f, 0.1f, 0.7f); hi = new Color(1f, 0.3f, 0.1f, 0.85f); }
+        foreach (var eye in eyeRenderers)
+        {
+            eye.color = Color.Lerp(lo, hi, (isEnraged || isFinal) ? p : 0.4f);
+            eye.transform.localScale = Vector3.one;
+        }
+    }
+
+    Color IdleTint()
+        => isFinal   ? new Color(0.42f, 0.05f, 0.04f, 0.97f)
+         : isEnraged ? new Color(0.32f, 0.05f, 0.05f, 0.96f)
+         : idleColor;
+
+    // ======================================================================
+    // sprite + fx creation
+    // ======================================================================
 
     void CreateBossSprite()
     {
@@ -165,9 +278,32 @@ public class BossVisuals : MonoBehaviour
         return sr;
     }
 
+    void CreateAura()
+    {
+        GameObject aura = new GameObject("Aura");
+        aura.transform.SetParent(transform, false);
+        aura.transform.localPosition = new Vector3(0f, 0.4f, 0f);
+        auraSR = aura.AddComponent<SpriteRenderer>();
+        auraSR.sprite = PlayerVisuals.CreateCircle(1.7f);
+        auraSR.color  = Color.clear;
+        auraSR.sortingOrder = -2;
+    }
+
+    void CreateSlash()
+    {
+        slashGO = new GameObject("Slash");
+        slashGO.transform.SetParent(transform, false);
+        slashGO.transform.localPosition = new Vector3(0f, -0.6f, 0f);
+        slashSR = slashGO.AddComponent<SpriteRenderer>();
+        slashSR.sprite = PlayerVisuals.CreateRect(2.4f, 0.18f);
+        slashSR.color  = Color.clear;
+        slashSR.sortingOrder = 8;
+        slashGO.SetActive(false);
+    }
+
     void CreateTelegraphIndicators()
     {
-        telegraphLeft_GO = BuildArrow("TelegraphLeft",  new Vector3(-3.2f, -0.5f, 0f), true);
+        telegraphLeft_GO  = BuildArrow("TelegraphLeft",  new Vector3(-3.2f, -0.5f, 0f), true);
         telegraphRight_GO = BuildArrow("TelegraphRight", new Vector3( 3.2f, -0.5f, 0f), false);
         telegraphLeftSR   = telegraphLeft_GO.GetComponent<SpriteRenderer>();
         telegraphRightSR  = telegraphRight_GO.GetComponent<SpriteRenderer>();
@@ -209,6 +345,30 @@ public class BossVisuals : MonoBehaviour
         attackTypeIndicatorSR.sortingOrder = 10;
     }
 
+    // ======================================================================
+    // per-frame fx
+    // ======================================================================
+
+    void UpdateAura()
+    {
+        if (auraSR == null) return;
+
+        float baseA = isFinal ? 0.30f : isEnraged ? 0.18f : 0.06f;
+        float speed = isFinal ? 6f : isEnraged ? 4f : 2f;
+        float p     = (Mathf.Sin(Time.time * speed) + 1f) / 2f;
+        float a     = baseA * Mathf.Lerp(0.5f, 1f, p);
+        if (currentState == CombatState.Windup || currentState == CombatState.Active) a *= 1.7f;
+
+        Color c = isFinal   ? new Color(1f, 0.45f, 0.1f)
+                : isEnraged ? new Color(0.95f, 0.12f, 0.06f)
+                            : new Color(0.5f, 0.06f, 0.06f);
+        c.a = a;
+        auraSR.color = c;
+
+        float scl = (isFinal ? 1.5f : isEnraged ? 1.25f : 1f) * Mathf.Lerp(0.95f, 1.08f, p);
+        auraSR.transform.localScale = Vector3.one * scl;
+    }
+
     void UpdateDangerRing(AttackData atk)
     {
         if (atk == null) return;
@@ -219,12 +379,18 @@ public class BossVisuals : MonoBehaviour
         float elapsed   = Time.time - GetWindupStart();
         float windupDur = CombatManager.Instance.CurrentWindupDuration;
         float chargeT   = Mathf.Clamp01(elapsed / Mathf.Max(0.0001f, windupDur));
+        float eased     = 1f - Mathf.Pow(1f - chargeT, 2f);   // ease-out so it slams shut
 
-        dangerRing.transform.localScale = Vector3.one * Mathf.Lerp(baseScale, maxScale, chargeT);
+        dangerRing.transform.localScale = Vector3.one * Mathf.Lerp(baseScale, maxScale, eased);
+        dangerRing.transform.localRotation = Quaternion.Euler(0f, 0f, Time.time * -90f);
+
+        // sharpen and flicker as the window closes (the "it's coming" read)
+        float lockPulse = chargeT > 0.7f ? (Mathf.Sin(Time.time * 30f) + 1f) / 2f * (chargeT - 0.7f) / 0.3f : 0f;
+        float alpha = Mathf.Lerp(0.05f, 0.28f, eased) + lockPulse * 0.25f;
 
         Color ringColor = (atk.attackType == AttackType.Heavy)
-            ? new Color(0.9f, 0.05f, 0.05f, Mathf.Lerp(0.08f, 0.3f, chargeT))
-            : new Color(0.85f, 0.15f, 0.05f, Mathf.Lerp(0.04f, 0.22f, chargeT));
+            ? new Color(0.95f, 0.05f, 0.05f, alpha)
+            : new Color(0.9f,  0.15f, 0.05f, alpha);
         dangerRingSR.color = ringColor;
     }
 
@@ -234,39 +400,46 @@ public class BossVisuals : MonoBehaviour
 
         bool show = currentState == CombatState.Windup || currentState == CombatState.Active;
         AttackType type = CombatManager.Instance.CurrentAttack.attackType;
-
-        // Source the arrow direction from CombatManager's live telegraph direction.
-        // For feints this is the fake until feintSwitchPoint, then the true direction,
-        // so the arrow actually flips mid-windup instead of lying for the whole telegraph.
         DodgeDirection shownDir = CombatManager.Instance.CurrentTelegraphDirection;
 
-        telegraphLeft_GO.SetActive(show  && shownDir == DodgeDirection.Left);
-        telegraphRight_GO.SetActive(show && shownDir == DodgeDirection.Right);
+        bool showArrows = show && type != AttackType.Unblockable;
+        telegraphLeft_GO.SetActive(showArrows  && shownDir == DodgeDirection.Left);
+        telegraphRight_GO.SetActive(showArrows && shownDir == DodgeDirection.Right);
 
         if (!show) return;
 
         if (currentState == CombatState.Active)
         {
             Color ac = (type == AttackType.Heavy)
-                ? new Color(1f, 0.3f, 0.05f, 1f)   
-                : new Color(1f, 0.05f, 0.05f, 1f);  
+                ? new Color(1f, 0.3f, 0.05f, 1f)
+                : new Color(1f, 0.05f, 0.05f, 1f);
             telegraphLeftSR.color  = ac;
             telegraphRightSR.color = ac;
-            telegraphLeft_GO.transform.localScale  = Vector3.one * 1.5f;
-            telegraphRight_GO.transform.localScale = Vector3.one * 1.5f;
+            telegraphLeft_GO.transform.localScale  = Vector3.one * 1.8f;
+            telegraphRight_GO.transform.localScale = Vector3.one * 1.8f;
         }
         else
         {
-            float pulse = (Mathf.Sin(Time.time * 8f) + 1f) / 2f;
+            // shake harder and grow as the windup charges, so the read pops
+            float windupDur = CombatManager.Instance.CurrentWindupDuration;
+            float charge    = Mathf.Clamp01((Time.time - windupStartTime) / Mathf.Max(0.0001f, windupDur));
+            float pulse     = (Mathf.Sin(Time.time * (8f + charge * 8f)) + 1f) / 2f;
+
             Color pc = type == AttackType.Feint
-                ? Color.Lerp(new Color(0.6f, 0.1f, 0.8f, 0.2f), new Color(0.8f, 0.2f, 1f, 0.9f), pulse)
-                : Color.Lerp(new Color(1f, 0.3f, 0.1f, 0.2f),   new Color(1f, 0.5f, 0.1f, 0.9f), pulse);
+                ? Color.Lerp(new Color(0.6f, 0.1f, 0.8f, 0.25f), new Color(0.85f, 0.25f, 1f, 1f), pulse)
+                : Color.Lerp(new Color(1f, 0.3f, 0.1f, 0.25f),   new Color(1f, 0.55f, 0.1f, 1f), pulse);
             telegraphLeftSR.color  = pc;
             telegraphRightSR.color = pc;
-            telegraphLeft_GO.transform.localScale  = Vector3.one;
-            telegraphRight_GO.transform.localScale = Vector3.one;
+
+            float s = Mathf.Lerp(0.95f, 1.35f, pulse) * Mathf.Lerp(1f, 1.25f, charge);
+            telegraphLeft_GO.transform.localScale  = Vector3.one * s;
+            telegraphRight_GO.transform.localScale = Vector3.one * s;
         }
     }
+
+    // ======================================================================
+    // state reactions
+    // ======================================================================
 
     void OnStateChanged(CombatState state)
     {
@@ -278,37 +451,41 @@ public class BossVisuals : MonoBehaviour
         switch (state)
         {
             case CombatState.Idle:
-                if (bodyRenderer) bodyRenderer.color = idleColor;
-                targetPosition = homePosition;
+                if (bodyRenderer) bodyRenderer.color = IdleTint();
+                lungeOffset = Vector3.zero;
                 dangerRing.SetActive(false);
                 attackTypeIndicatorSR.color = Color.clear;
-                ResetWeapon();
+                SetWeapon(30f, 200f);
                 break;
 
             case CombatState.Windup:
                 dangerRing.SetActive(true);
                 windupStartTime = Time.time;
+                lungeOffset = Vector3.zero;
 
-                if (atk != null)
+                if (atk != null && !CombatManager.Instance.hideAttackTells)
                 {
                     attackTypeIndicatorSR.color = atk.attackType switch
                     {
-                        AttackType.Heavy  => new Color(1f, 0.3f, 0.05f, 0.9f), 
-                        AttackType.Feint  => new Color(0.7f, 0.1f, 0.9f, 0.9f), 
-                        AttackType.Double => new Color(0.2f, 0.8f, 1f,  0.9f),  
-                        _                 => new Color(1f, 0.2f, 0.1f,  0.9f), 
+                        AttackType.Heavy       => new Color(1f, 0.3f, 0.05f, 0.9f),
+                        AttackType.Feint       => new Color(0.7f, 0.1f, 0.9f, 0.9f),
+                        AttackType.Double      => new Color(0.2f, 0.8f, 1f,  0.9f),
+                        AttackType.Unblockable => new Color(1f, 1f, 1f, 0.95f),
+                        _                      => new Color(1f, 0.2f, 0.1f,  0.9f),
                     };
                 }
-
-                if (weaponRenderer != null && atk != null)
+                else if (atk != null)
                 {
-                    float sign = (atk.requiredDodge == DodgeDirection.Left) ? 1f : -1f;
-                    float pullAngle = (atk.attackType == AttackType.Heavy) ? 90f : 75f;
-                    weaponRenderer.transform.localRotation = Quaternion.Euler(0, 0, sign * pullAngle);
+                    attackTypeIndicatorSR.color = Color.clear;   // final phase: read timing, not type
                 }
 
-                // Feint eye flash is triggered by OnFeintSwitch now, so it lands exactly
-                // when the boss reveals the true direction rather than on a fixed delay.
+                if (atk != null)
+                {
+                    // wind the weapon back slowly (anticipation)
+                    float sign = (atk.requiredDodge == DodgeDirection.Left) ? 1f : -1f;
+                    float pullAngle = (atk.attackType == AttackType.Heavy) ? 95f : 75f;
+                    SetWeapon(sign * pullAngle, 150f);
+                }
                 break;
 
             case CombatState.Active:
@@ -318,28 +495,33 @@ public class BossVisuals : MonoBehaviour
 
                 if (atk != null)
                 {
-                    float atkSign = (atk.requiredDodge == DodgeDirection.Left) ? 1f : -1f;
-                    float lungeAmt = (atk.attackType == AttackType.Heavy) ? 1.6f : 1.1f;
-                    targetPosition = homePosition + Vector3.down * lungeAmt;
-                    if (weaponRenderer)
-                        weaponRenderer.transform.localRotation = Quaternion.Euler(0, 0, -atkSign * 55f);
+                    float atkSign  = (atk.requiredDodge == DodgeDirection.Left) ? 1f : -1f;
+                    bool  heavy    = atk.attackType == AttackType.Heavy;
+                    float lungeAmt = heavy ? 1.7f : 1.15f;
+
+                    posSmoothTime = 0.03f;   // snap into the strike
+                    lungeOffset   = Vector3.down * lungeAmt + Vector3.right * (-atkSign) * 0.25f;
+                    SetWeapon(-atkSign * 55f, 900f);   // fast slash-through
+                    AddShake(heavy ? 0.32f : 0.2f);
+                    TriggerSlash(-atkSign, heavy);
                 }
                 break;
 
             case CombatState.Recovery:
                 if (bodyRenderer) bodyRenderer.color = recoveryColor;
-                targetPosition = homePosition;
-                ResetWeapon();
+                lungeOffset = Vector3.zero;
+                SetWeapon(30f, 260f);
                 break;
 
             case CombatState.PerfectWindow:
                 if (bodyRenderer) bodyRenderer.color = staggerColor;
-                targetPosition = homePosition + Vector3.up * 0.45f;
+                lungeOffset = Vector3.up * 0.45f;
+                SetWeapon(10f, 400f);
                 StartCoroutine(StaggerShake());
                 break;
 
             case CombatState.Counter:
-                targetPosition = homePosition + Vector3.up * 0.8f;
+                lungeOffset = Vector3.up * 0.8f;
                 break;
         }
     }
@@ -347,6 +529,7 @@ public class BossVisuals : MonoBehaviour
     void OnCounterHit()
     {
         if (isDefeated) return;
+        AddShake(0.28f);
         StartCoroutine(CounterFlash());
     }
 
@@ -355,45 +538,72 @@ public class BossVisuals : MonoBehaviour
         for (int i = 0; i < 3; i++)
         {
             if (bodyRenderer) bodyRenderer.color = counterHitColor;
-            transform.localScale = Vector3.one * 1.18f;
+            scalePunch = 1.2f;
             yield return new WaitForSeconds(0.06f);
-            if (bodyRenderer) bodyRenderer.color = idleColor;
-            transform.localScale = Vector3.one;
+            if (bodyRenderer) bodyRenderer.color = IdleTint();
+            scalePunch = 1f;
             yield return new WaitForSeconds(0.04f);
         }
     }
 
     IEnumerator StaggerShake()
     {
-        Vector3 origin = targetPosition;
         for (int i = 0; i < 6; i++)
         {
-            targetPosition = origin + (Vector3)Random.insideUnitCircle * 0.14f;
-            yield return new WaitForSeconds(0.04f);
+            AddShake(0.16f);
+            yield return new WaitForSeconds(0.05f);
         }
-        targetPosition = origin;
     }
 
     void OnFeintSwitch()
     {
         if (isDefeated) return;
+        AddShake(0.12f);
         StartCoroutine(FeintEyeFlash());
     }
 
     IEnumerator FeintEyeFlash()
     {
         if (eyeRenderers == null) yield break;
-        // No leading delay - this fires the instant the boss commits to the real side.
         for (int i = 0; i < 3; i++)
         {
-            foreach (var e in eyeRenderers)
-                e.color = new Color(0.8f, 0.2f, 1f, 1f);
+            foreach (var e in eyeRenderers) e.color = new Color(0.85f, 0.2f, 1f, 1f);
             yield return new WaitForSeconds(0.08f);
-            foreach (var e in eyeRenderers)
-                e.color = new Color(1f, 0.3f, 0.1f, 0.8f);
+            foreach (var e in eyeRenderers) e.color = new Color(1f, 0.3f, 0.1f, 0.8f);
             yield return new WaitForSeconds(0.08f);
         }
     }
+
+    // ---- phase escalation ----
+
+    void OnRage()
+    {
+        if (isEnraged) return;
+        isEnraged = true;
+        StartCoroutine(PhaseRoar(new Color(1f, 0.2f, 0.05f)));
+    }
+
+    void OnFinal()
+    {
+        isFinal = true;
+        StartCoroutine(PhaseRoar(new Color(1f, 0.6f, 0.1f)));
+    }
+
+    IEnumerator PhaseRoar(Color flash)
+    {
+        AddShake(0.5f);
+        for (int i = 0; i < 5; i++)
+        {
+            if (bodyRenderer) bodyRenderer.color = flash;
+            scalePunch = 1.24f;
+            yield return new WaitForSeconds(0.05f);
+            if (bodyRenderer) bodyRenderer.color = IdleTint();
+            scalePunch = 1f;
+            yield return new WaitForSeconds(0.05f);
+        }
+    }
+
+    // ---- defeat ----
 
     void OnDefeated()
     {
@@ -401,6 +611,8 @@ public class BossVisuals : MonoBehaviour
         if (telegraphLeft_GO)  telegraphLeft_GO.SetActive(false);
         if (telegraphRight_GO) telegraphRight_GO.SetActive(false);
         dangerRing.SetActive(false);
+        if (slashGO) slashGO.SetActive(false);
+        if (auraSR) auraSR.color = Color.clear;
         attackTypeIndicatorSR.color = Color.clear;
         StartCoroutine(DefeatShatter());
     }
@@ -425,6 +637,7 @@ public class BossVisuals : MonoBehaviour
             {
                 if (!children[i]) continue;
                 children[i].position += velocities[i] * Time.deltaTime;
+                children[i].Rotate(0f, 0f, velocities[i].x * 60f * Time.deltaTime);
                 velocities[i] += Vector3.down * 5f * Time.deltaTime;
                 SpriteRenderer sr = children[i].GetComponent<SpriteRenderer>();
                 if (sr) { Color c = sr.color; c.a = Mathf.Lerp(1f, 0f, t / 1.3f); sr.color = c; }
@@ -433,14 +646,49 @@ public class BossVisuals : MonoBehaviour
         }
     }
 
-    void ResetWeapon()
+    // ======================================================================
+    // helpers
+    // ======================================================================
+
+    void SetWeapon(float targetAngle, float turnSpeed)
     {
-        if (weaponRenderer)
-            weaponRenderer.transform.localRotation = Quaternion.Euler(0, 0, 30f);
+        weaponTargetAngle = targetAngle;
+        weaponTurnSpeed   = turnSpeed;
     }
 
-    private float windupStartTime;
-    float GetWindupStart() => windupStartTime;
+    void ResetWeapon() => SetWeapon(30f, 200f);
+
+    void AddShake(float magnitude)
+        => shakeOffset += (Vector3)Random.insideUnitCircle * magnitude;
+
+    void TriggerSlash(float dirSign, bool heavy)
+    {
+        if (slashGO == null) return;
+        StartCoroutine(SlashFlash(dirSign, heavy));
+    }
+
+    IEnumerator SlashFlash(float dirSign, bool heavy)
+    {
+        slashGO.SetActive(true);
+        slashGO.transform.localPosition = new Vector3(0f, -0.7f, 0f);
+        slashGO.transform.localRotation = Quaternion.Euler(0f, 0f, dirSign > 0 ? 22f : -22f);
+
+        Color hot = heavy ? new Color(1f, 0.45f, 0.1f, 0.95f) : new Color(1f, 0.85f, 0.7f, 0.85f);
+        float t = 0f, dur = 0.18f;
+        while (t < dur)
+        {
+            t += Time.deltaTime;
+            float k = t / dur;
+            float ease = 1f - Mathf.Pow(1f - k, 3f);
+            float w = Mathf.Lerp(0.3f, heavy ? 2.3f : 1.8f, ease);
+            slashGO.transform.localScale = new Vector3(w, Mathf.Lerp(1.5f, 0.4f, k), 1f);
+            Color c = hot; c.a = Mathf.Lerp(hot.a, 0f, k);
+            slashSR.color = c;
+            yield return null;
+        }
+        slashSR.color = Color.clear;
+        slashGO.SetActive(false);
+    }
 
     static Sprite CreateArrowSprite(bool pointLeft)
     {

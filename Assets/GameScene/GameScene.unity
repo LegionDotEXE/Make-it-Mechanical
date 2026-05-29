@@ -373,8 +373,6 @@ MonoBehaviour:
   playerPosition: {x: 0, y: -2.5, z: 0}
   bossPosition: {x: 0, y: 2, z: 0}
   bgColor: {r: 0.06, g: 0.05, b: 0.04, a: 1}
-  floorColor: {r: 0.12, g: 0.1, b: 0.08, a: 1}
-  ambientColor: {r: 0.08, g: 0.06, b: 0.05, a: 1}
 --- !u!4 &870644479
 Transform:
   m_ObjectHideFlags: 0
@@ -390,6 +388,75 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1195443258
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1195443260}
+  - component: {fileID: 1195443259}
+  m_Layer: 0
+  m_Name: GameAudioController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1195443259
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1195443258}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b34715c74eb8e7f46aa12904bbd6d55b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameAudioController
+  bossMusic: {fileID: 8300000, guid: 27d5c89a9234c184e91d3cf77d2a6c25, type: 3}
+  dodgeClip: {fileID: 8300000, guid: 57b7a659e9fc68f47b7514bea72a8c55, type: 3}
+  perfectDodgeClip: {fileID: 8300000, guid: 1081601270571bd4a9c715d9b7241d54, type: 3}
+  playerHit1: {fileID: 8300000, guid: 87b9c6cd78098da41b2930263535ed04, type: 3}
+  playerHit2: {fileID: 8300000, guid: 5a36628388ab1ac44a2b8ca903084f09, type: 3}
+  counterClip: {fileID: 8300000, guid: 638dbab752424c549a5cbb991659ff94, type: 3}
+  deathClip: {fileID: 8300000, guid: f98bc426a5c237a42a8c9b466cbbe97c, type: 3}
+  evadeWhooshClip: {fileID: 0}
+  counterWhiffClip: {fileID: 0}
+  normalAttackClip: {fileID: 8300000, guid: 21561614b29d98e479acb0eabf659585, type: 3}
+  feintAttackClip: {fileID: 8300000, guid: bce4c40737081f14b8758c7aceccde17, type: 3}
+  heavyAttack1: {fileID: 8300000, guid: 3c63225a99dbedc4daf31478f6668790, type: 3}
+  heavyAttack2: {fileID: 8300000, guid: 64567ed54d874db458e1eaeed948c999, type: 3}
+  heavyWindup: {fileID: 8300000, guid: b690b01b854bab149894fb59ec8a9edd, type: 3}
+  unblockableAttackClip: {fileID: 0}
+  unblockableWindup: {fileID: 0}
+  bossAttackVolume: 0.9
+  heavyWindupVolume: 0.9
+  unblockableWindupVolume: 0.9
+  dodgeVolume: 0.75
+  perfectDodgeVolume: 1
+  playerHitVolume: 1
+  counterVolume: 1
+  counterWhiffVolume: 0.5
+  deathVolume: 1
+--- !u!4 &1195443260
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1195443258}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -1.18701, y: -0.21249, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -397,3 +464,4 @@ SceneRoots:
   - {fileID: 519420032}
   - {fileID: 619394802}
   - {fileID: 870644479}
+  - {fileID: 1195443260}

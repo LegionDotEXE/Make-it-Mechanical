@@ -4,7 +4,7 @@ public class SoundManager : MonoBehaviour
 {
     public static SoundManager Instance { get; private set; }
 
-    [Header("Audio Sources")]
+    [Header("Audio Sources (auto-created if left empty)")]
     public AudioSource musicSource;
     public AudioSource sfxSource;
     public AudioSource loopSource;
@@ -18,12 +18,24 @@ public class SoundManager : MonoBehaviour
         }
 
         Instance = this;
+
+        musicSource = EnsureSource(musicSource);
+        sfxSource   = EnsureSource(sfxSource);
+        loopSource  = EnsureSource(loopSource);
+    }
+
+    AudioSource EnsureSource(AudioSource src)
+    {
+        if (src == null) src = gameObject.AddComponent<AudioSource>();
+        src.playOnAwake  = false;
+        src.spatialBlend = 0f;   // 2D - not attenuated by distance from the listener
+        return src;
     }
 
     public void PlaySFX(AudioClip clip, float volume = 1f)
     {
         if (clip == null || sfxSource == null) return;
-        sfxSource.PlayOneShot(clip, volume);
+        sfxSource.PlayOneShot(clip, Mathf.Clamp01(volume));
     }
 
     public void PlayMusic(AudioClip clip)
@@ -39,9 +51,9 @@ public class SoundManager : MonoBehaviour
     {
         if (clip == null || loopSource == null) return;
 
-        loopSource.clip = clip;
-        loopSource.volume = volume;
-        loopSource.loop = true;
+        loopSource.clip   = clip;
+        loopSource.volume = Mathf.Clamp01(volume);
+        loopSource.loop   = true;
         loopSource.Play();
     }
 

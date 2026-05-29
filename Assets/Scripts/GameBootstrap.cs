@@ -27,6 +27,9 @@ public class GameBootstrap : MonoBehaviour
         new GameObject("InputManager").AddComponent<InputManager>();
         new GameObject("CombatManager").AddComponent<CombatManager>();
 
+        if (FindAnyObjectByType<SoundManager>() == null)
+            new GameObject("SoundManager").AddComponent<SoundManager>();
+
         GameObject player = new GameObject("Player");
         player.transform.position = playerPosition;
         player.AddComponent<PlayerController>();
@@ -47,8 +50,6 @@ public class GameBootstrap : MonoBehaviour
         new GameObject("RestartHandler").AddComponent<RestartHandler>();
 
         Debug.Log("[GameBootstrap] Ready. A=left D=right W=counter R=restart");
-
-        CreateAudioSystem();
     }
 
     AttackData[] CreateDefaultAttacks()
@@ -78,7 +79,20 @@ public class GameBootstrap : MonoBehaviour
         a4.requiredDodge = DodgeDirection.Right;
         a4.feintSwitchPoint = 0.55f; a4.damageOnHit = 25f;
 
-        return new AttackData[] { a1, a2, a3, a4 };
+        AttackData a5 = ScriptableObject.CreateInstance<AttackData>();
+        a5.name = "DoubleLeft"; a5.attackType = AttackType.Double;
+        a5.telegraphDuration = 1.2f; a5.activeDuration = 0.4f;
+        a5.recoveryDuration = 1.0f; a5.perfectWindowRadius = 0.12f;
+        a5.requiredDodge = DodgeDirection.Left; a5.doubleStrikeDelay = 0.32f;
+        a5.damageOnHit = 16f;
+
+        AttackData a6 = ScriptableObject.CreateInstance<AttackData>();
+        a6.name = "Unblockable"; a6.attackType = AttackType.Unblockable;
+        a6.telegraphDuration = 1.4f; a6.activeDuration = 0.5f;
+        a6.recoveryDuration = 1.2f; a6.perfectWindowRadius = 0.14f;
+        a6.damageOnHit = 0f; a6.unblockableDamage = 32f;
+
+        return new AttackData[] { a1, a2, a3, a4, a5, a6 };
     }
 
     void CreateArena()
@@ -104,27 +118,6 @@ public class GameBootstrap : MonoBehaviour
         sr.sprite = PlayerVisuals.CreateRect(size.x, size.y);
         sr.color  = color;
         sr.sortingOrder = order;
-    }
-
-    void CreateAudioSystem()
-    {
-        GameObject audioGO = new GameObject("SoundManager");
-
-        SoundManager sm = audioGO.AddComponent<SoundManager>();
-
-        AudioSource musicSource = audioGO.AddComponent<AudioSource>();
-        AudioSource sfxSource = audioGO.AddComponent<AudioSource>();
-        AudioSource loopSource = audioGO.AddComponent<AudioSource>();
-
-        musicSource.playOnAwake = false;
-        sfxSource.playOnAwake = false;
-        loopSource.playOnAwake = false;
-
-        sm.musicSource = musicSource;
-        sm.sfxSource = sfxSource;
-        sm.loopSource = loopSource;
-
-        new GameObject("GameAudioController").AddComponent<GameAudioController>();
     }
 }
 

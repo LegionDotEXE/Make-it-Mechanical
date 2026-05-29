@@ -19,32 +19,50 @@ public class CombatManager : MonoBehaviour
 
     [HideInInspector] public AttackData CurrentAttack;
 
+    // ---- events (all existing events are preserved; new ones added at the bottom) ----
     public event Action<CombatState> OnStateChanged;
-    public event Action OnPlayerDodgedSuccessfully;
-    public event Action OnPlayerPerfectDodge;
-    public event Action OnPlayerHit;
-    public event Action OnCounterLanded;
+    public event Action OnPlayerDodgedSuccessfully;   // a "good" (safe but not perfect) dodge, fired at impact
+    public event Action OnPlayerPerfectDodge;         // perfect dodge, fired at impact
+    public event Action OnPlayerHit;                  // the attack connected, fired at impact
+    public event Action OnCounterLanded;              // riposte (perfect-window counter) OR successful parry
     public event Action OnPlayerDeath;
     public event Action OnBossDefeated;
-    public event Action OnFeintSwitch;   // boss flips the telegraphed direction mid-windup
+    public event Action OnFeintSwitch;                // boss flips the telegraphed direction mid-windup
 
-    // Direction the boss is *currently telegraphing*. For a feint this starts as the
-    // fake (opposite of requiredDodge) and flips to requiredDodge at feintSwitchPoint.
-    // BossVisuals should read this (and/or OnFeintSwitch) to draw the windup.
+    public event Action<DodgeDirection> OnPlayerEvadeStarted;  // fired the instant a dodge is committed (for responsive visuals)
+    public event Action OnCounterWhiffed;             // pressed counter with no valid target (mash punish)
+
+    // direction the boss is currently telegraphing (fake-until-switch for feints)
     public DodgeDirection CurrentTelegraphDirection { get; private set; }
 
-    // Windup length of the strike currently being telegraphed: the full telegraph
-    // normally, or doubleStrikeDelay for the second hit of a double strike.
     public float CurrentWindupDuration => currentTelegraphDuration;
 
     [HideInInspector] public float attackImpactTime;
     private float stateEnterTime;
 
-    // Windup length of the *current* strike: the full telegraph normally, or the short
-    // gap before the second hit of a double strike.
     private float currentTelegraphDuration;
     private int   strikesRemaining;
     private bool  feintSwitched;
+
+    [Header("Dodge Feel")]
+    [Tooltip("How long a dodge protects you. You must press so this window covers impact.")]
+    public float dodgeIFrameDuration = 0.30f;
+    [Tooltip("Lockout after any dodge/parry/counter press before you can act again.")]
+    public float dodgeCooldown       = 0.50f;
+    [Tooltip("How long the boss stays staggered/open after a counter or parry.")]
+    public float counterStateDuration = 0.30f;
+
+    // ---- phase modifiers (driven by BossController) ----
+    [HideInInspector] public float perfectWindowScale = 1f;     // <1 shrinks the perfect window in later phases
+    [HideInInspector] public bool  hideAttackTells    = false;  // late phase: suppress the attack-type cue
+
+    // ---- player action state ----
+    private bool           isEvading;
+    private float          evadeStartTime;
+    private DodgeDirection evadeDir;
+    private bool           isParrying;
+    private float          parryStartTime;
+    private float          lastActionTime = -999f;
 
     [Header("Debug")]
     public bool showDebugOverlay = false;
@@ -60,11 +78,11 @@ public class CombatManager : MonoBehaviour
         CurrentAttack    = attack;
         strikesRemaining = (attack.attackType == AttackType.Double) ? 2 : 1;
         feintSwitched    = false;
+        ClearEvade();
+        ClearParry();
         StartStrike(attack.telegraphDuration);
     }
 
-    // Sets up one windup -> active cycle. Used for the opening strike and, for double
-    // strikes, for the follow-up hit (with a shorter windup = doubleStrikeDelay).
     void StartStrike(float windupDuration)
     {
         currentTelegraphDuration = windupDuration;
@@ -75,9 +93,6 @@ public class CombatManager : MonoBehaviour
                 : CurrentAttack.requiredDodge;
 
         TransitionTo(CombatState.Windup);
-
-        // Impact = the moment the windup ends. Tied to the same Time.time clock the
-        // state machine runs on, so pause / slow-mo can't desync the perfect window.
         attackImpactTime = stateEnterTime + windupDuration;
     }
 
@@ -88,7 +103,6 @@ public class CombatManager : MonoBehaviour
         switch (CurrentState)
         {
             case CombatState.Windup:
-                // Feint: flip the telegraphed direction partway through the windup.
                 if (CurrentAttack.attackType == AttackType.Feint && !feintSwitched &&
                     elapsed >= currentTelegraphDuration * CurrentAttack.feintSwitchPoint)
                 {
@@ -98,15 +112,14 @@ public class CombatManager : MonoBehaviour
                 }
 
                 if (elapsed >= currentTelegraphDuration)
-                    TransitionTo(CombatState.Active);
+                    ResolveImpact();   // <- the hit is decided here, the moment the windup ends
                 break;
 
             case CombatState.Active:
                 if (elapsed >= CurrentAttack.activeDuration)
                 {
-                    // Active window ended without a dodge -> the hit lands.
-                    OnPlayerHit?.Invoke();
-                    ResolveStrike();
+                    if (HasPendingStrike()) BeginNextStrike();
+                    else                    TransitionTo(CombatState.Recovery);
                 }
                 break;
 
@@ -116,7 +129,7 @@ public class CombatManager : MonoBehaviour
                 break;
 
             case CombatState.Counter:
-                if (elapsed >= 0.3f)
+                if (elapsed >= counterStateDuration)
                     TransitionTo(CombatState.Recovery);
                 break;
 
@@ -127,38 +140,117 @@ public class CombatManager : MonoBehaviour
         }
     }
 
-    public bool TryDodge(DodgeDirection dir)
+    // Decides the outcome of a strike based on whether the player's i-frames (or parry)
+    // covered the impact moment. Called once per strike, at the end of its windup.
+    void ResolveImpact()
+    {
+        float now = Time.time;
+        AttackData atk = CurrentAttack;
+
+        if (atk.attackType == AttackType.Unblockable)
+        {
+            bool parried = isParrying && (now - parryStartTime) >= 0f
+                                      && (now - parryStartTime) <= dodgeIFrameDuration;
+            ClearEvade();
+            ClearParry();
+
+            if (parried)
+            {
+                OnCounterLanded?.Invoke();          // a clean parry ripostes
+                TransitionTo(CombatState.Counter);
+            }
+            else
+            {
+                OnPlayerHit?.Invoke();
+                TransitionTo(CombatState.Active);
+            }
+            return;
+        }
+
+        bool covering = isEvading && (now - evadeStartTime) >= 0f
+                                  && (now - evadeStartTime) <= dodgeIFrameDuration;
+        bool correct  = covering && evadeDir == atk.requiredDodge;
+
+        ClearParry();
+
+        if (correct)
+        {
+            // perfect = you committed within the perfect window before impact (a late, reactive dodge)
+            bool perfect = (now - evadeStartTime) <= EffectivePerfectRadius();
+            if (perfect) OnPlayerPerfectDodge?.Invoke();
+            else         OnPlayerDodgedSuccessfully?.Invoke();
+
+            ClearEvade();
+
+            // no counter window on a non-final strike of a double; just chain via Active
+            if (perfect && !HasPendingStrike())
+                TransitionTo(CombatState.PerfectWindow);
+            else
+                TransitionTo(CombatState.Active);
+            return;
+        }
+
+        // missed the window (too early), wrong direction, or no dodge at all -> hit
+        ClearEvade();
+        OnPlayerHit?.Invoke();
+        TransitionTo(CombatState.Active);
+    }
+
+    // ---- player input entry points ----
+
+    public bool TryStartEvade(DodgeDirection dir)
     {
         if (CurrentState != CombatState.Windup && CurrentState != CombatState.Active)
-            return false;
+            return false;                              // can only dodge during an incoming attack
+        if (!CanAct())
+            return false;                              // still locked out from a previous action
 
-        if (dir != CurrentAttack.requiredDodge)
-            return false;
-
-        float timeToImpact = Mathf.Abs(attackImpactTime - Time.time);
-        bool isPerfect     = timeToImpact <= CurrentAttack.perfectWindowRadius;
-
-        if (isPerfect) OnPlayerPerfectDodge?.Invoke();
-        else           OnPlayerDodgedSuccessfully?.Invoke();
-
-        if (HasPendingStrike())
-        {
-            // Double strike: surviving this hit does NOT end the attack or open a
-            // counter window - the second hit is still coming.
-            BeginNextStrike();
-        }
-        else if (isPerfect)
-        {
-            TransitionTo(CombatState.PerfectWindow);
-        }
-        else
-        {
-            TransitionTo(CombatState.Recovery);
-        }
-
+        isEvading      = true;
+        evadeStartTime = Time.time;
+        evadeDir       = dir;
+        isParrying     = false;
+        lastActionTime = Time.time;
+        OnPlayerEvadeStarted?.Invoke(dir);
         return true;
     }
 
+    bool TryStartParry()
+    {
+        if (CurrentState != CombatState.Windup && CurrentState != CombatState.Active) return false;
+        if (!CanAct()) return false;
+
+        isParrying     = true;
+        parryStartTime = Time.time;
+        isEvading      = false;
+        lastActionTime = Time.time;
+        return true;
+    }
+
+    // Single entry point for the counter/parry key (W). Decides what it means in context.
+    public void TryCounterInput()
+    {
+        // 1) riposte the open window after a perfect dodge
+        if (CurrentState == CombatState.PerfectWindow)
+        {
+            OnCounterLanded?.Invoke();
+            TransitionTo(CombatState.Counter);
+            return;
+        }
+
+        // 2) parry an incoming unblockable
+        if (CurrentAttack != null && CurrentAttack.attackType == AttackType.Unblockable &&
+            (CurrentState == CombatState.Windup || CurrentState == CombatState.Active))
+        {
+            TryStartParry();
+            return;
+        }
+
+        // 3) mashed it with no valid target -> brief lockout so offense is a real decision
+        lastActionTime = Time.time;
+        OnCounterWhiffed?.Invoke();
+    }
+
+    // legacy alias (only the perfect-window riposte path)
     public void TryCounter()
     {
         if (CurrentState != CombatState.PerfectWindow) return;
@@ -166,15 +258,11 @@ public class CombatManager : MonoBehaviour
         TransitionTo(CombatState.Counter);
     }
 
-    // Called when a strike finishes (whether dodged or landed). Either chains the next
-    // hit of a double strike or ends the attack.
-    void ResolveStrike()
-    {
-        if (HasPendingStrike())
-            BeginNextStrike();
-        else
-            TransitionTo(CombatState.Recovery);
-    }
+    // ---- helpers ----
+
+    bool CanAct() => Time.time - lastActionTime >= dodgeCooldown;
+
+    float EffectivePerfectRadius() => CurrentAttack.perfectWindowRadius * perfectWindowScale;
 
     bool HasPendingStrike()
         => CurrentAttack.attackType == AttackType.Double && strikesRemaining > 1;
@@ -184,6 +272,9 @@ public class CombatManager : MonoBehaviour
         strikesRemaining--;
         StartStrike(CurrentAttack.doubleStrikeDelay);
     }
+
+    void ClearEvade() { isEvading  = false; }
+    void ClearParry() { isParrying = false; }
 
     static DodgeDirection Opposite(DodgeDirection d)
         => d == DodgeDirection.Left ? DodgeDirection.Right : DodgeDirection.Left;
@@ -210,9 +301,10 @@ public class CombatManager : MonoBehaviour
         {
             float toImpact = attackImpactTime - Time.time;
             GUI.Label(new Rect(10, 30, 380, 20), $"Time to impact: {toImpact:F3}s");
-            GUI.Label(new Rect(10, 50, 380, 20), $"Perfect window: +/-{CurrentAttack.perfectWindowRadius:F3}s");
-            GUI.Label(new Rect(10, 70, 380, 20), $"Required dodge: {CurrentAttack.requiredDodge}  (telegraph: {CurrentTelegraphDirection})");
+            GUI.Label(new Rect(10, 50, 380, 20), $"i-frames: {dodgeIFrameDuration:F2}s  perfect: +/-{EffectivePerfectRadius():F3}s");
+            GUI.Label(new Rect(10, 70, 380, 20), $"Required: {CurrentAttack.requiredDodge}  telegraph: {CurrentTelegraphDirection}");
             GUI.Label(new Rect(10, 90, 380, 20), $"Type: {CurrentAttack.attackType}  strikes left: {strikesRemaining}");
+            GUI.Label(new Rect(10,110, 380, 20), $"Can act: {CanAct()}");
         }
     }
 }
