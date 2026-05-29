@@ -20,6 +20,7 @@ public class RhythmLaneManager : MonoBehaviour
 
     [Header("Lane Layout")]
     public float laneWidth       = 120f;
+    public float laneSwitchSpeed = 1400f;   // px/sec a tile darts sideways on a feint
     public float laneSpacing     = 10f;
     public float judgmentLineY   = -380f;   // Y position of the hit zone (from center)
     public float spawnY          = 500f;    // where tiles appear at the top
@@ -57,6 +58,7 @@ public class RhythmLaneManager : MonoBehaviour
     // current attack tracking
     private bool tileSpawnedForCurrentAttack = false;
     private bool counterTileSpawned = false;
+    private int  strikesSeenThisAttack = 0;   // 0 = first hit; >0 = double-strike follow-up
 
     // key labels
     private Text leftKeyLabel, rightKeyLabel, centerKeyLabel;
@@ -97,6 +99,7 @@ public class RhythmLaneManager : MonoBehaviour
             CombatManager.Instance.OnPlayerPerfectDodge        -= OnPerfectDodge;
             CombatManager.Instance.OnPlayerHit                 -= OnMiss;
             CombatManager.Instance.OnCounterLanded             -= OnCounter;
+            CombatManager.Instance.OnFeintSwitch               -= OnFeintLaneSwitch;
         }
     }
 
@@ -108,6 +111,7 @@ public class RhythmLaneManager : MonoBehaviour
         CombatManager.Instance.OnPlayerHit                 -= OnMiss; // ensure no double-sub
         CombatManager.Instance.OnPlayerHit                 += OnMiss;
         CombatManager.Instance.OnCounterLanded             += OnCounter;
+        CombatManager.Instance.OnFeintSwitch               += OnFeintLaneSwitch;
     }
 
     void Update()
@@ -123,6 +127,22 @@ public class RhythmLaneManager : MonoBehaviour
             RectTransform rt = tile.rect;
             float newY = rt.anchoredPosition.y - tile.fallSpeed * dt;
             rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, newY);
+
+            // feint lane switch: dart sideways to the true lane when the boss commits
+            if (tile.sliding)
+            {
+                float nx = Mathf.MoveTowards(rt.anchoredPosition.x, tile.targetX, laneSwitchSpeed * dt);
+                rt.anchoredPosition = new Vector2(nx, rt.anchoredPosition.y);
+                if (tile.image != null)
+                    tile.image.color = Color.Lerp(tile.image.color, tile.targetColor, dt * 12f);
+
+                if (Mathf.Abs(nx - tile.targetX) < 0.5f)
+                {
+                    rt.anchoredPosition = new Vector2(tile.targetX, rt.anchoredPosition.y);
+                    if (tile.image != null) tile.image.color = tile.targetColor;
+                    tile.sliding = false;
+                }
+            }
 
             // pulse effect as tile approaches judgment line
             float distToLine = Mathf.Abs(newY - judgmentLineY);
@@ -189,6 +209,7 @@ public class RhythmLaneManager : MonoBehaviour
             case CombatState.Idle:
                 tileSpawnedForCurrentAttack = false;
                 counterTileSpawned = false;
+                strikesSeenThisAttack = 0;
                 break;
         }
     }
@@ -221,6 +242,22 @@ public class RhythmLaneManager : MonoBehaviour
         FlashJudgmentLine(counterFlash);
     }
 
+    void OnFeintLaneSwitch()
+    {
+        bool trueLeft          = (CombatManager.Instance.CurrentAttack.requiredDodge == DodgeDirection.Left);
+        RectTransform trueLane = trueLeft ? leftLane : rightLane;
+        Color trueColor        = trueLeft ? leftTileColor : rightTileColor;
+
+        // dart every active dodge tile over to the real lane
+        foreach (var tile in activeTiles)
+        {
+            if (tile.isCounter) continue;
+            tile.targetX     = trueLane.anchoredPosition.x;
+            tile.targetColor = trueColor;
+            tile.sliding     = true;
+        }
+    }
+
     // ---- tile spawning ----
 
     void SpawnDodgeTile()
@@ -228,29 +265,53 @@ public class RhythmLaneManager : MonoBehaviour
         AttackData atk = CombatManager.Instance.CurrentAttack;
         if (atk == null) return;
 
-        // which lane does the tile fall in?
-        // tile appears in the lane the player needs to press
-        bool isLeft = (atk.requiredDodge == DodgeDirection.Left);
+        // Which hit of the attack is this? The second tile of a double strike gets
+        // marked as a combo follow-up.
+        bool isFollowup = (atk.attackType == AttackType.Double) && strikesSeenThisAttack > 0;
+        strikesSeenThisAttack++;
+
+        // Spawn in the lane the boss is *telegraphing* right now. For a feint this is
+        // the fake lane; OnFeintLaneSwitch then darts the tile to the true lane in sync
+        // with the boss's reveal, so the rhythm overlay no longer spoils the feint.
+        bool isLeft = (CombatManager.Instance.CurrentTelegraphDirection == DodgeDirection.Left);
         RectTransform lane = isLeft ? leftLane : rightLane;
         Color color = isLeft ? leftTileColor : rightTileColor;
 
-        // calculate fall speed so tile reaches judgment line in exactly telegraphDuration
+        // Keep a consistent fall *speed* across every hit (set by the first strike's
+        // telegraph). A double strike's quick second hit then gets a shorter runway
+        // rather than a faster, harder-to-read streak.
         float fallDistance = spawnY - judgmentLineY;
-        float fallSpeed = fallDistance / atk.telegraphDuration;
+        float fallSpeed    = fallDistance / Mathf.Max(0.0001f, atk.telegraphDuration);
+
+        // This strike's actual windup: full telegraph, or doubleStrikeDelay for hit 2+
+        // of a double. Start the tile far enough up that it lands on the judgment line
+        // exactly when the strike goes Active.
+        float windupDur = CombatManager.Instance.CurrentWindupDuration;
+        float startY    = Mathf.Min(spawnY, judgmentLineY + fallSpeed * windupDur);
 
         GameObject tileGO = GetOrCreateTile();
         RectTransform rt = tileGO.GetComponent<RectTransform>();
         rt.SetParent(lanesContainer, false);
 
-        // position at top of the correct lane
         float laneX = lane.anchoredPosition.x;
-        rt.anchoredPosition = new Vector2(laneX, spawnY);
+        rt.anchoredPosition = new Vector2(laneX, startY);
         rt.sizeDelta = new Vector2(tileWidth, tileHeight);
 
         Image img = tileGO.GetComponent<Image>();
         img.color = color;
 
         tileGO.SetActive(true);
+
+        // mark the follow-up hit of a double strike: show the "2" badge and brighten
+        // the rim so it reads as part of a combo rather than a fresh attack
+        Transform badge = tileGO.transform.Find("ComboBadge");
+        if (badge != null) badge.gameObject.SetActive(isFollowup);
+
+        Outline rim = tileGO.GetComponent<Outline>();
+        if (rim != null)
+            rim.effectColor = isFollowup
+                ? new Color(1f, 1f, 1f, 0.85f)
+                : new Color(1f, 1f, 1f, 0.15f);
 
         activeTiles.Add(new FallingTile
         {
@@ -303,6 +364,11 @@ public class RhythmLaneManager : MonoBehaviour
                 activeTiles.RemoveAt(i);
             }
         }
+
+        // A strike just resolved. Re-arm the spawn guard so the follow-up hit of a
+        // double strike gets its own tile when it enters Windup. (For single attacks
+        // there's no further Windup before Idle, so this is harmless.)
+        tileSpawnedForCurrentAttack = false;
     }
 
     void ClearCounterTiles()
@@ -337,6 +403,27 @@ public class RhythmLaneManager : MonoBehaviour
         outline.effectColor = new Color(1f, 1f, 1f, 0.15f);
         outline.effectDistance = new Vector2(2, -2);
 
+        // combo badge ("2" for a double strike's follow-up hit); hidden by default
+        GameObject badge = new GameObject("ComboBadge");
+        badge.transform.SetParent(go.transform, false);
+        RectTransform brt = badge.AddComponent<RectTransform>();
+        brt.anchorMin = Vector2.zero;
+        brt.anchorMax = Vector2.one;
+        brt.offsetMin = Vector2.zero;
+        brt.offsetMax = Vector2.zero;
+        Text btxt = badge.AddComponent<Text>();
+        btxt.text = "2";
+        btxt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        btxt.fontSize = 34;
+        btxt.fontStyle = FontStyle.Bold;
+        btxt.color = new Color(1f, 1f, 1f, 0.9f);
+        btxt.alignment = TextAnchor.MiddleCenter;
+        btxt.raycastTarget = false;
+        Outline bol = badge.AddComponent<Outline>();
+        bol.effectColor = Color.black;
+        bol.effectDistance = new Vector2(2, -2);
+        badge.SetActive(false);
+
         return go;
     }
 
@@ -344,6 +431,10 @@ public class RhythmLaneManager : MonoBehaviour
     {
         if (tile.go != null)
         {
+            // reset combo badge so a reused tile starts clean
+            Transform badge = tile.go.transform.Find("ComboBadge");
+            if (badge != null) badge.gameObject.SetActive(false);
+
             tile.go.SetActive(false);
             tilePool.Enqueue(tile.go);
         }
@@ -516,12 +607,17 @@ public class RhythmLaneManager : MonoBehaviour
 
     // ---- data ----
 
-    struct FallingTile
+    class FallingTile
     {
         public GameObject go;
         public RectTransform rect;
         public Image image;
         public float fallSpeed;
         public bool isCounter;
+
+        // feint lane-switch animation
+        public bool  sliding;
+        public float targetX;
+        public Color targetColor;
     }
 }
