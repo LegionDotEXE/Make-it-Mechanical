@@ -6,9 +6,8 @@ public class BossController : MonoBehaviour
     [Header("Boss Health")]
     public float maxHealth = 200f;
     public float currentHealth { get; private set; }
-    public float counterDamage = 25f;  // damage per successful player counter
+    public float counterDamage = 25f;
 
-    // Parker will set up attacks in the Inspector 
     [Header("Attacks")]
     public AttackData[] attacks;
 
@@ -17,11 +16,11 @@ public class BossController : MonoBehaviour
     public float delayBetweenAttacks = 0.8f;
 
     [Header("Events - hook UI and animations here")]
-    public UnityEvent<float> OnBossHealthChanged; 
+    public UnityEvent<float> OnBossHealthChanged;
     public UnityEvent OnBossDefeated;
-    public UnityEvent OnAttackWindup;             
-    public UnityEvent OnAttackActive;          
-    public UnityEvent OnAttackRecovery;        
+    public UnityEvent OnAttackWindup;
+    public UnityEvent OnAttackActive;
+    public UnityEvent OnAttackRecovery;
 
     private int currentAttackIndex = 0;
     private bool combatRunning = false;
@@ -33,13 +32,16 @@ public class BossController : MonoBehaviour
 
         if (attacks == null || attacks.Length == 0)
         {
-            Debug.LogError("[BossController] No attacks assigned! Add an AttackData in the Inspector.");
+            Debug.LogError("[BossController] No attacks assigned!");
             return;
         }
 
         CombatManager.Instance.OnCounterLanded += TakeCounterDamage;
         CombatManager.Instance.OnStateChanged  += HandleStateChanged;
         CombatManager.Instance.OnBossDefeated  += HandleDefeated;
+
+        // stop the loop when player dies too — no point ticking after game over
+        CombatManager.Instance.OnPlayerDeath   += HandlePlayerDied;
 
         combatRunning = true;
         StartNextAttack();
@@ -52,16 +54,18 @@ public class BossController : MonoBehaviour
             CombatManager.Instance.OnCounterLanded -= TakeCounterDamage;
             CombatManager.Instance.OnStateChanged  -= HandleStateChanged;
             CombatManager.Instance.OnBossDefeated  -= HandleDefeated;
+            CombatManager.Instance.OnPlayerDeath   -= HandlePlayerDied;
         }
     }
 
     void Update()
     {
+        // guard first — if combat stopped don't tick anything
         if (!combatRunning) return;
 
-        // tick the state machine every frame
         CombatManager.Instance.Tick();
 
+        // when idle, wait the delay then fire the next attack
         if (CombatManager.Instance.CurrentState == CombatState.Idle)
         {
             idleTimer += Time.deltaTime;
@@ -75,11 +79,12 @@ public class BossController : MonoBehaviour
 
     void StartNextAttack()
     {
+        // loop the attack list — works with 1 attack or 10
         currentAttackIndex = currentAttackIndex % attacks.Length;
         AttackData next = attacks[currentAttackIndex];
         currentAttackIndex++;
 
-        Debug.Log($"[Boss] starting attack: {next.name}  required dodge: {next.requiredDodge}");
+        Debug.Log($"[Boss] attack: {next.name} | dodge: {next.requiredDodge}");
         CombatManager.Instance.BeginAttack(next);
     }
 
@@ -95,12 +100,14 @@ public class BossController : MonoBehaviour
 
     void TakeCounterDamage()
     {
+        // don't process damage after combat ends
+        if (!combatRunning) return;
+
         currentHealth -= counterDamage;
         currentHealth  = Mathf.Max(currentHealth, 0f);
 
         OnBossHealthChanged?.Invoke(currentHealth / maxHealth);
-
-        Debug.Log($"[Boss] hit by counter - health: {currentHealth}/{maxHealth}");
+        Debug.Log($"[Boss] countered — health: {currentHealth}/{maxHealth}");
 
         if (currentHealth <= 0f)
             CombatManager.Instance.NotifyBossDefeated();
@@ -108,9 +115,14 @@ public class BossController : MonoBehaviour
 
     void HandleDefeated()
     {
-        combatRunning = false;
+        combatRunning = false;  // stops Update() from ticking
         OnBossDefeated?.Invoke();
         Debug.Log("[Boss] defeated!");
-        // could add victory dance or something here, but for now we'll just stop the fight
+    }
+
+    void HandlePlayerDied()
+    {
+        combatRunning = false;  // stops Update() from ticking after game over
+        Debug.Log("[Boss] player died — stopping combat loop");
     }
 }

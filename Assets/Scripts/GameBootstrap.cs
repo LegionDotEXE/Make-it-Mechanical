@@ -37,17 +37,14 @@ public class GameBootstrap : MonoBehaviour
             cam.orthographicSize = 6f;
         }
 
-        // --- 3. Managers ---
         CreateSingleton<InputManager>("InputManager");
         CreateSingleton<CombatManager>("CombatManager");
 
-        // --- 4. Player ---
         GameObject player = new GameObject("Player");
         player.transform.position = playerPosition;
         player.AddComponent<PlayerController>();
         player.AddComponent<PlayerVisuals>();
 
-        // --- 5. Boss ---
         GameObject boss = new GameObject("Boss");
         boss.transform.position = bossPosition;
 
@@ -85,17 +82,17 @@ public class GameBootstrap : MonoBehaviour
                              "Drag your AttackData assets into the Bootstrap Inspector for real data.");
         }
 
-        // --- 6. UI ---
         UIManager ui = UIManager.CreateUI();
 
-        // wire health events
         bc.OnBossHealthChanged.AddListener(ui.UpdateBossHealth);
         PlayerController pc = player.GetComponent<PlayerController>();
         pc.OnHealthChanged.AddListener(ui.UpdatePlayerHealth);
 
-        // --- 7. Restart handler ---
         gameObject.AddComponent<RestartHandler>();
+        gameObject.AddComponent<CameraEffects>();
 
+
+        //Debug.Log("[GameBootstrap] Scene initialized. Controls: A = dodge left, D = dodge right, W = counter, R = restart");
         Debug.Log("[GameBootstrap] Scene initialized. Controls: A = dodge left, D = dodge right, W = counter, R = restart");
     }
 
@@ -154,9 +151,7 @@ public class GameBootstrap : MonoBehaviour
     }
 }
 
-/// <summary>
-/// Simple restart: press R to reload the scene.
-/// </summary>
+
 public class RestartHandler : MonoBehaviour
 {
     private InputAction restartAction;
