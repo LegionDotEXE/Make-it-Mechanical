@@ -1,0 +1,103 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{AB937873-26F1-7556-07B9-03C3EFDE0108}|Assembly-CSharp.csproj|C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\assets\\scripts\\sound\\soundmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AB937873-26F1-7556-07B9-03C3EFDE0108}|Assembly-CSharp.csproj|solutionrelative:assets\\scripts\\sound\\soundmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AB937873-26F1-7556-07B9-03C3EFDE0108}|Assembly-CSharp.csproj|c:\\users\\cliff\\cmpm170\\make-it-mechanical\\assets\\scripts\\sound\\gameaudiocontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AB937873-26F1-7556-07B9-03C3EFDE0108}|Assembly-CSharp.csproj|solutionrelative:assets\\scripts\\sound\\gameaudiocontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AB937873-26F1-7556-07B9-03C3EFDE0108}|Assembly-CSharp.csproj|c:\\users\\cliff\\cmpm170\\make-it-mechanical\\assets\\scripts\\gamebootstrap.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AB937873-26F1-7556-07B9-03C3EFDE0108}|Assembly-CSharp.csproj|solutionrelative:assets\\scripts\\gamebootstrap.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AB937873-26F1-7556-07B9-03C3EFDE0108}|Assembly-CSharp.csproj|C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\assets\\scripts\\attackdata.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AB937873-26F1-7556-07B9-03C3EFDE0108}|Assembly-CSharp.csproj|solutionrelative:assets\\scripts\\attackdata.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\assets\\scripts\\sound\\audiolistener.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:assets\\scripts\\sound\\audiolistener.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 2,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "GameBootstrap.cs",
+              "DocumentMoniker": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\Assets\\Scripts\\GameBootstrap.cs",
+              "RelativeDocumentMoniker": "Assets\\Scripts\\GameBootstrap.cs",
+              "ToolTip": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\Assets\\Scripts\\GameBootstrap.cs",
+              "RelativeToolTip": "Assets\\Scripts\\GameBootstrap.cs",
+              "ViewState": "AgIAAGYAAAAAAAAAAAAqwHYAAAAoAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-29T09:17:33.524Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "GameAudioController.cs",
+              "DocumentMoniker": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\Assets\\Scripts\\Sound\\GameAudioController.cs",
+              "RelativeDocumentMoniker": "Assets\\Scripts\\Sound\\GameAudioController.cs",
+              "ToolTip": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\Assets\\Scripts\\Sound\\GameAudioController.cs",
+              "RelativeToolTip": "Assets\\Scripts\\Sound\\GameAudioController.cs",
+              "ViewState": "AgIAAIsAAAAAAAAAAAAwwJMAAAAMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-29T09:15:09.319Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "SoundManager.cs",
+              "DocumentMoniker": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\Assets\\Scripts\\Sound\\SoundManager.cs",
+              "RelativeDocumentMoniker": "Assets\\Scripts\\Sound\\SoundManager.cs",
+              "ToolTip": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\Assets\\Scripts\\Sound\\SoundManager.cs",
+              "RelativeToolTip": "Assets\\Scripts\\Sound\\SoundManager.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAC0AAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-29T07:47:16.782Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "AudioListener.cs",
+              "DocumentMoniker": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\Assets\\Scripts\\Sound\\AudioListener.cs",
+              "RelativeDocumentMoniker": "Assets\\Scripts\\Sound\\AudioListener.cs",
+              "ToolTip": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\Assets\\Scripts\\Sound\\AudioListener.cs",
+              "RelativeToolTip": "Assets\\Scripts\\Sound\\AudioListener.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-29T07:47:14.603Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "AttackData.cs",
+              "DocumentMoniker": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\Assets\\Scripts\\AttackData.cs",
+              "RelativeDocumentMoniker": "Assets\\Scripts\\AttackData.cs",
+              "ToolTip": "C:\\Users\\cliff\\CMPM170\\Make-it-Mechanical\\Assets\\Scripts\\AttackData.cs",
+              "RelativeToolTip": "Assets\\Scripts\\AttackData.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-29T05:44:13.573Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
