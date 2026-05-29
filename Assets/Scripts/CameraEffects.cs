@@ -7,7 +7,6 @@ public class CameraEffects : MonoBehaviour
 {
     public static CameraEffects Instance { get; private set; }
 
-    // screen flash overlay
     private Image flashOverlay;
     private float flashTimer;
     private Color flashColor;

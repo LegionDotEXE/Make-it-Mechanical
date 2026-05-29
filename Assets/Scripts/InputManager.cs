@@ -23,7 +23,6 @@ public class InputManager : MonoBehaviour
         }
         Instance = this;
 
-        // Create actions bound to the same keys as before (A, D, W)
         dodgeLeftAction  = new InputAction("DodgeLeft",  InputActionType.Button, "<Keyboard>/a");
         dodgeRightAction = new InputAction("DodgeRight", InputActionType.Button, "<Keyboard>/d");
         counterAction    = new InputAction("Counter",    InputActionType.Button, "<Keyboard>/w");

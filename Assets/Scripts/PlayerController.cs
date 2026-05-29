@@ -6,22 +6,20 @@ using UnityEngine.Events;
 public class PlayerController : MonoBehaviour
 {
     [Header("Health")]
-    public float maxHealth       = 100f;
-    public float currentHealth   { get; private set; }
+    public float maxHealth           = 100f;
+    public float currentHealth       { get; private set; }
 
     [Header("Hit Stagger")]
-    [Tooltip("Seconds after a hit where the player cannot be hit again.")]
     public float invincibilityDuration = 0.6f;
     private bool isInvincible = false;
     private bool isDead       = false;
 
-    [Header("Events — hook UI here (Tommy)")]
-    public UnityEvent<float> OnHealthChanged;   // 0-1 normalized
-    public UnityEvent<float> OnHealthChangedRaw; // actual HP value, for damage numbers
-    public UnityEvent OnDeath;
-    public UnityEvent OnDodge;
-    public UnityEvent OnPerfectDodge;
-    public UnityEvent OnHitWhileInvincible;    
+    [Header("Events")]
+    public UnityEvent<float> OnHealthChanged     = new UnityEvent<float>();
+    public UnityEvent        OnDeath             = new UnityEvent();
+    public UnityEvent        OnDodge             = new UnityEvent();
+    public UnityEvent        OnPerfectDodge      = new UnityEvent();
+    public UnityEvent        OnHitWhileInvincible = new UnityEvent();
 
     private Action dodgeLeftHandler;
     private Action dodgeRightHandler;
@@ -59,7 +57,6 @@ public class PlayerController : MonoBehaviour
     void TryDodge(DodgeDirection dir)
     {
         if (isDead) return;
-
         bool dodged = CombatManager.Instance.TryDodge(dir);
         if (!dodged) return;
 
@@ -77,12 +74,9 @@ public class PlayerController : MonoBehaviour
 
     void TakeHit()
     {
-        if (isDead) return;
-
-        if (isInvincible)
+        if (isDead || isInvincible)
         {
             OnHitWhileInvincible?.Invoke();
-            Debug.Log("[Player] hit blocked by invincibility");
             return;
         }
 
@@ -91,9 +85,6 @@ public class PlayerController : MonoBehaviour
         currentHealth  = Mathf.Max(currentHealth, 0f);
 
         OnHealthChanged?.Invoke(currentHealth / maxHealth);
-        OnHealthChangedRaw?.Invoke(currentHealth);
-
-        Debug.Log($"[Player] hit for {damage} — HP: {currentHealth}/{maxHealth}");
 
         if (currentHealth <= 0f)
         {
@@ -114,10 +105,7 @@ public class PlayerController : MonoBehaviour
     void HandleDeath()
     {
         isDead = true;
-        isInvincible = true; 
+        isInvincible = true;
         OnDeath?.Invoke();
-        Debug.Log("[Player] died");
     }
-
-    public float HealthNormalized => currentHealth / maxHealth;
 }

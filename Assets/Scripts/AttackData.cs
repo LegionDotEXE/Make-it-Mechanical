@@ -2,7 +2,6 @@ using UnityEngine;
 
 public enum DodgeDirection { Left, Right }
 
-// what kind of attack this is — drives visual and timing differences
 public enum AttackType
 {
     Normal,   // standard single hit, left or right

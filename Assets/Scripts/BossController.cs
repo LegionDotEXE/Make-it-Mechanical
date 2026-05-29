@@ -1,4 +1,3 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -10,8 +9,8 @@ public class BossController : MonoBehaviour
     public float currentHealth { get; private set; }
 
     [Header("Rage Phase")]
-    public float rageThreshold  = 0.4f;  
-    public float rageSpeedMult  = 0.65f;  
+    public float rageThreshold  = 0.4f;
+    public float rageSpeedMult  = 0.65f;
     public float rageDamageMult = 1.5f;
     public bool  IsEnraged      => isEnraged;
     private bool isEnraged      = false;
@@ -23,12 +22,12 @@ public class BossController : MonoBehaviour
     public float delayBetweenAttacks = 0.8f;
 
     [Header("Events")]
-    public UnityEvent<float> OnBossHealthChanged;
-    public UnityEvent        OnBossDefeated;
-    public UnityEvent        OnAttackWindup;
-    public UnityEvent        OnAttackActive;
-    public UnityEvent        OnAttackRecovery;
-    public UnityEvent        OnRageEntered;    
+    public UnityEvent<float> OnBossHealthChanged = new UnityEvent<float>();
+    public UnityEvent        OnBossDefeated      = new UnityEvent();
+    public UnityEvent        OnAttackWindup      = new UnityEvent();
+    public UnityEvent        OnAttackActive      = new UnityEvent();
+    public UnityEvent        OnAttackRecovery    = new UnityEvent();
+    public UnityEvent        OnRageEntered       = new UnityEvent();
 
     private int   currentAttackIndex = 0;
     private bool  combatRunning      = false;
@@ -48,10 +47,6 @@ public class BossController : MonoBehaviour
         CombatManager.Instance.OnStateChanged  += HandleStateChanged;
         CombatManager.Instance.OnBossDefeated  += HandleDefeated;
         CombatManager.Instance.OnPlayerDeath   += HandlePlayerDied;
-
-        UIManager ui = FindAnyObjectByType<UIManager>();
-        if (ui != null)
-            OnRageEntered.AddListener(ui.TriggerBossRage);
 
         combatRunning = true;
         StartNextAttack();
@@ -103,7 +98,7 @@ public class BossController : MonoBehaviour
             rage.telegraphDuration   = src.telegraphDuration  * rageSpeedMult;
             rage.activeDuration      = src.activeDuration     * rageSpeedMult;
             rage.recoveryDuration    = src.recoveryDuration   * rageSpeedMult;
-            rage.perfectWindowRadius = src.perfectWindowRadius; // keep fair
+            rage.perfectWindowRadius = src.perfectWindowRadius;
             rage.requiredDodge       = src.requiredDodge;
             rage.feintSwitchPoint    = src.feintSwitchPoint;
             rage.damageOnHit         = src.damageOnHit * rageDamageMult;

@@ -30,7 +30,6 @@ public class CombatManager : MonoBehaviour
     [HideInInspector] public float attackImpactTime;
     private float stateEnterTime;
 
-    // debug overlay OFF by default — uncheck in Inspector if needed during dev
     [Header("Debug")]
     public bool showDebugOverlay = false;
 

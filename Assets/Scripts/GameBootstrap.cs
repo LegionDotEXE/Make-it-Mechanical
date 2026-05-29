@@ -24,12 +24,12 @@ public class GameBootstrap : MonoBehaviour
             cam.orthographicSize = 6f;
         }
 
-        CreateSingleton<InputManager>("InputManager");
-        CreateSingleton<CombatManager>("CombatManager");
+        new GameObject("InputManager").AddComponent<InputManager>();
+        new GameObject("CombatManager").AddComponent<CombatManager>();
 
         GameObject player = new GameObject("Player");
         player.transform.position = playerPosition;
-        PlayerController pc = player.AddComponent<PlayerController>();
+        player.AddComponent<PlayerController>();
         player.AddComponent<PlayerVisuals>();
 
         GameObject boss = new GameObject("Boss");
@@ -40,19 +40,7 @@ public class GameBootstrap : MonoBehaviour
         bc.attacks = (attacks != null && attacks.Length > 0)
             ? attacks : CreateDefaultAttacks();
 
-        UIManager ui = UIManager.CreateUI();
-
-        pc.OnHealthChanged.AddListener(ui.UpdatePlayerHealth);
-        bc.OnBossHealthChanged.AddListener(ui.UpdateBossHealth);
-
-        CombatManager.Instance.OnPlayerHit += () =>
-            ui.SpawnDamageNumber(
-                CombatManager.Instance.CurrentAttack?.damageOnHit ?? 20f,
-                player.transform.position + Vector3.up * 1.2f, false);
-
-        CombatManager.Instance.OnCounterLanded += () =>
-            ui.SpawnDamageNumber(bc.counterDamage,
-                boss.transform.position + Vector3.up * 1.5f, true);
+        UIManager.CreateUI();
 
         gameObject.AddComponent<CameraEffects>();
 
@@ -115,13 +103,6 @@ public class GameBootstrap : MonoBehaviour
         sr.color  = color;
         sr.sortingOrder = order;
     }
-
-    T CreateSingleton<T>(string name) where T : MonoBehaviour
-    {
-        T existing = FindAnyObjectByType<T>();
-        if (existing != null) return existing;
-        return new GameObject(name).AddComponent<T>();
-    }
 }
 
 public class RestartHandler : MonoBehaviour
@@ -129,7 +110,6 @@ public class RestartHandler : MonoBehaviour
     void Update()
     {
         if (Input.GetKeyDown(KeyCode.R))
-            UnityEngine.SceneManagement.SceneManager.LoadScene(
-                UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 }
