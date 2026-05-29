@@ -21,9 +21,8 @@ public class PlayerController : MonoBehaviour
     public UnityEvent OnDeath;
     public UnityEvent OnDodge;
     public UnityEvent OnPerfectDodge;
-    public UnityEvent OnHitWhileInvincible;     // optional: flash "IMMUNE" or similar
+    public UnityEvent OnHitWhileInvincible;    
 
-    // cached delegates for clean unsubscribe
     private Action dodgeLeftHandler;
     private Action dodgeRightHandler;
 
@@ -80,7 +79,6 @@ public class PlayerController : MonoBehaviour
     {
         if (isDead) return;
 
-        // invincibility window — no double-hits during recovery
         if (isInvincible)
         {
             OnHitWhileInvincible?.Invoke();
@@ -103,7 +101,6 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        // start invincibility window so next attack can't chain-kill
         StartCoroutine(InvincibilityWindow());
     }
 
@@ -117,11 +114,10 @@ public class PlayerController : MonoBehaviour
     void HandleDeath()
     {
         isDead = true;
-        isInvincible = true; // no more hits after death
+        isInvincible = true; 
         OnDeath?.Invoke();
         Debug.Log("[Player] died");
     }
 
-    // read-only access for UI
     public float HealthNormalized => currentHealth / maxHealth;
 }

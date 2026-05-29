@@ -3,12 +3,12 @@ using UnityEngine;
 
 public enum CombatState
 {
-    Idle,           
-    Windup,        
-    Active,         
+    Idle,
+    Windup,
+    Active,
     PerfectWindow,
-    Counter,        
-    Recovery     
+    Counter,
+    Recovery
 }
 
 public class CombatManager : MonoBehaviour
@@ -20,19 +20,19 @@ public class CombatManager : MonoBehaviour
     [HideInInspector] public AttackData CurrentAttack;
 
     public event Action<CombatState> OnStateChanged;
-    public event Action OnPlayerDodgedSuccessfully;   
-    public event Action OnPlayerPerfectDodge;         
-    public event Action OnPlayerHit;                
-    public event Action OnCounterLanded;      
+    public event Action OnPlayerDodgedSuccessfully;
+    public event Action OnPlayerPerfectDodge;
+    public event Action OnPlayerHit;
+    public event Action OnCounterLanded;
     public event Action OnPlayerDeath;
     public event Action OnBossDefeated;
 
+    [HideInInspector] public float attackImpactTime;
+    private float stateEnterTime;
 
-    [HideInInspector] public float attackImpactTime;  
-    private float stateEnterTime;                    
-
+    // debug overlay OFF by default — uncheck in Inspector if needed during dev
     [Header("Debug")]
-    public bool showDebugOverlay = true;
+    public bool showDebugOverlay = false;
 
     void Awake()
     {
@@ -42,7 +42,7 @@ public class CombatManager : MonoBehaviour
 
     public void BeginAttack(AttackData attack)
     {
-        CurrentAttack = attack;
+        CurrentAttack    = attack;
         attackImpactTime = (float)AudioSettings.dspTime + attack.telegraphDuration;
         TransitionTo(CombatState.Windup);
     }
@@ -80,12 +80,8 @@ public class CombatManager : MonoBehaviour
                 if (elapsed >= CurrentAttack.recoveryDuration)
                     TransitionTo(CombatState.Idle);
                 break;
-
-            // Idle has no timeout -- NOTE
-            // BossController will call BeginAttack when it's time for the next one
         }
     }
-
 
     public bool TryDodge(DodgeDirection dir)
     {
@@ -96,7 +92,7 @@ public class CombatManager : MonoBehaviour
             return false;
 
         float timeToImpact = Mathf.Abs(attackImpactTime - (float)AudioSettings.dspTime);
-        bool isPerfect = timeToImpact <= CurrentAttack.perfectWindowRadius;
+        bool isPerfect     = timeToImpact <= CurrentAttack.perfectWindowRadius;
 
         if (isPerfect)
         {
@@ -114,27 +110,17 @@ public class CombatManager : MonoBehaviour
 
     public void TryCounter()
     {
-        if (CurrentState != CombatState.PerfectWindow)
-            return;
-
+        if (CurrentState != CombatState.PerfectWindow) return;
         OnCounterLanded?.Invoke();
         TransitionTo(CombatState.Counter);
     }
 
-    public void NotifyPlayerDeath()
-    {
-        OnPlayerDeath?.Invoke();
-    }
-
-    public void NotifyBossDefeated()
-    {
-        OnBossDefeated?.Invoke();
-    }
-
+    public void NotifyPlayerDeath()   => OnPlayerDeath?.Invoke();
+    public void NotifyBossDefeated()  => OnBossDefeated?.Invoke();
 
     void TransitionTo(CombatState next)
     {
-        CurrentState = next;
+        CurrentState   = next;
         stateEnterTime = Time.time;
         OnStateChanged?.Invoke(next);
 
@@ -145,15 +131,13 @@ public class CombatManager : MonoBehaviour
     void OnGUI()
     {
         if (!showDebugOverlay) return;
-
         GUI.color = Color.yellow;
         GUI.Label(new Rect(10, 10, 300, 20), $"State: {CurrentState}");
-
         if (CurrentAttack != null)
         {
             float toImpact = attackImpactTime - (float)AudioSettings.dspTime;
             GUI.Label(new Rect(10, 30, 300, 20), $"Time to impact: {toImpact:F3}s");
-            GUI.Label(new Rect(10, 50, 300, 20), $"Perfect window: ±{CurrentAttack.perfectWindowRadius:F3}s");
+            GUI.Label(new Rect(10, 50, 300, 20), $"Perfect window: +/-{CurrentAttack.perfectWindowRadius:F3}s");
             GUI.Label(new Rect(10, 70, 300, 20), $"Required dodge: {CurrentAttack.requiredDodge}");
         }
     }

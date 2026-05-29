@@ -5,17 +5,16 @@ using UnityEngine.Events;
 public class BossController : MonoBehaviour
 {
     [Header("Boss Health")]
-    public float maxHealth    = 200f;
+    public float maxHealth     = 200f;
     public float counterDamage = 25f;
     public float currentHealth { get; private set; }
 
     [Header("Rage Phase")]
-    [Tooltip("Below this HP fraction the boss enters rage — faster attacks, more damage.")]
-    public float rageThreshold    = 0.4f;   // 40% HP
-    public float rageSpeedMult    = 0.65f;  // telegraph/active durations multiplied by this
-    public float rageDamageMult   = 1.5f;   // hit damage multiplied by this
-    private bool isEnraged        = false;
-    public bool IsEnraged         => isEnraged;
+    public float rageThreshold  = 0.4f;  
+    public float rageSpeedMult  = 0.65f;  
+    public float rageDamageMult = 1.5f;
+    public bool  IsEnraged      => isEnraged;
+    private bool isEnraged      = false;
 
     [Header("Attacks")]
     public AttackData[] attacks;
@@ -25,11 +24,11 @@ public class BossController : MonoBehaviour
 
     [Header("Events")]
     public UnityEvent<float> OnBossHealthChanged;
-    public UnityEvent OnBossDefeated;
-    public UnityEvent OnAttackWindup;
-    public UnityEvent OnAttackActive;
-    public UnityEvent OnAttackRecovery;
-    public UnityEvent OnRageEntered;           // UIManager / BossVisuals hooks this
+    public UnityEvent        OnBossDefeated;
+    public UnityEvent        OnAttackWindup;
+    public UnityEvent        OnAttackActive;
+    public UnityEvent        OnAttackRecovery;
+    public UnityEvent        OnRageEntered;    
 
     private int   currentAttackIndex = 0;
     private bool  combatRunning      = false;
@@ -49,6 +48,10 @@ public class BossController : MonoBehaviour
         CombatManager.Instance.OnStateChanged  += HandleStateChanged;
         CombatManager.Instance.OnBossDefeated  += HandleDefeated;
         CombatManager.Instance.OnPlayerDeath   += HandlePlayerDied;
+
+        UIManager ui = FindAnyObjectByType<UIManager>();
+        if (ui != null)
+            OnRageEntered.AddListener(ui.TriggerBossRage);
 
         combatRunning = true;
         StartNextAttack();
@@ -74,8 +77,9 @@ public class BossController : MonoBehaviour
         if (CombatManager.Instance.CurrentState == CombatState.Idle)
         {
             idleTimer += Time.deltaTime;
-            // rage phase shortens delay between attacks too
-            float delay = isEnraged ? delayBetweenAttacks * 0.5f : delayBetweenAttacks;
+            float delay = isEnraged
+                ? delayBetweenAttacks * 0.5f
+                : delayBetweenAttacks;
             if (idleTimer >= delay)
             {
                 idleTimer = 0f;
@@ -90,29 +94,28 @@ public class BossController : MonoBehaviour
         AttackData src = attacks[currentAttackIndex];
         currentAttackIndex++;
 
-        // in rage phase, apply speed and damage multipliers at runtime
-        // we clone the values into a temp ScriptableObject so we don't dirty the asset
         AttackData next = src;
         if (isEnraged)
         {
-            AttackData enraged = ScriptableObject.CreateInstance<AttackData>();
-            enraged.name               = src.name + "_ENRAGED";
-            enraged.telegraphDuration  = src.telegraphDuration  * rageSpeedMult;
-            enraged.activeDuration     = src.activeDuration     * rageSpeedMult;
-            enraged.recoveryDuration   = src.recoveryDuration   * rageSpeedMult;
-            enraged.perfectWindowRadius = src.perfectWindowRadius; // window stays fair
-            enraged.requiredDodge      = src.requiredDodge;
-            enraged.damageOnHit        = src.damageOnHit * rageDamageMult;
-            next = enraged;
+            AttackData rage = ScriptableObject.CreateInstance<AttackData>();
+            rage.name                = src.name + "_RAGE";
+            rage.attackType          = src.attackType;
+            rage.telegraphDuration   = src.telegraphDuration  * rageSpeedMult;
+            rage.activeDuration      = src.activeDuration     * rageSpeedMult;
+            rage.recoveryDuration    = src.recoveryDuration   * rageSpeedMult;
+            rage.perfectWindowRadius = src.perfectWindowRadius; // keep fair
+            rage.requiredDodge       = src.requiredDodge;
+            rage.feintSwitchPoint    = src.feintSwitchPoint;
+            rage.damageOnHit         = src.damageOnHit * rageDamageMult;
+            next = rage;
         }
 
-        Debug.Log($"[Boss] attack: {next.name} | dodge: {next.requiredDodge} | enraged: {isEnraged}");
         CombatManager.Instance.BeginAttack(next);
     }
 
-    void HandleStateChanged(CombatState newState)
+    void HandleStateChanged(CombatState s)
     {
-        switch (newState)
+        switch (s)
         {
             case CombatState.Windup:   OnAttackWindup?.Invoke();   break;
             case CombatState.Active:   OnAttackActive?.Invoke();   break;
@@ -126,11 +129,8 @@ public class BossController : MonoBehaviour
 
         currentHealth -= counterDamage;
         currentHealth  = Mathf.Max(currentHealth, 0f);
-
         OnBossHealthChanged?.Invoke(currentHealth / maxHealth);
-        Debug.Log($"[Boss] countered — HP: {currentHealth}/{maxHealth}");
 
-        // check rage threshold
         if (!isEnraged && currentHealth / maxHealth <= rageThreshold)
         {
             isEnraged = true;
@@ -146,11 +146,7 @@ public class BossController : MonoBehaviour
     {
         combatRunning = false;
         OnBossDefeated?.Invoke();
-        Debug.Log("[Boss] defeated!");
     }
 
-    void HandlePlayerDied()
-    {
-        combatRunning = false;
-    }
+    void HandlePlayerDied() => combatRunning = false;
 }

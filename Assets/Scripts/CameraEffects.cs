@@ -2,10 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// Camera shake and full-screen flash effects.
-/// GameBootstrap adds this automatically — no manual setup needed.
-/// </summary>
+
 public class CameraEffects : MonoBehaviour
 {
     public static CameraEffects Instance { get; private set; }
@@ -57,7 +54,6 @@ public class CameraEffects : MonoBehaviour
 
     void Update()
     {
-        // flash fade
         if (flashTimer > 0f && flashOverlay != null)
         {
             flashTimer -= Time.deltaTime;
@@ -67,7 +63,6 @@ public class CameraEffects : MonoBehaviour
         }
     }
 
-    // ---- public API ----
 
     public void Shake(float magnitude, float duration)
     {
@@ -83,7 +78,6 @@ public class CameraEffects : MonoBehaviour
             flashOverlay.color = color;
     }
 
-    // ---- internals ----
 
     IEnumerator DoShake(float magnitude, float duration)
     {
@@ -106,7 +100,6 @@ public class CameraEffects : MonoBehaviour
 
     void BuildFlashOverlay()
     {
-        // find or create a canvas for the overlay
         Canvas canvas = FindAnyObjectByType<Canvas>();
         if (canvas == null) return;
 
@@ -123,7 +116,6 @@ public class CameraEffects : MonoBehaviour
         flashOverlay.color        = Color.clear;
         flashOverlay.raycastTarget = false;
 
-        // push to very front
         Canvas c = go.AddComponent<Canvas>();
         c.overrideSorting = true;
         c.sortingOrder    = 999;

@@ -6,34 +6,21 @@ public class UIManager : MonoBehaviour
 {
     public static UIManager Instance { get; private set; }
 
-    [Header("Health Bars")]
-    public Image bossHealthFill;
-    public Image playerHealthFill;
+    private Image playerFill;
+    private Image bossFill;
+    private Text  playerHPText;
+    private Text  bossHPText;
 
-    // ghost bars — white bar behind fill that lags behind for damage effect
-    private Image bossGhostFill;
-    private Image playerGhostFill;
+    private float playerMax    = 100f;
+    private float bossMax      = 200f;
+    private float playerTarget = 1f;
+    private float bossTarget   = 1f;
 
-    private float bossTargetFill   = 1f;
-    private float playerTargetFill = 1f;
-    private float bossGhostFill_val   = 1f;
-    private float playerGhostFill_val = 1f;
+    private bool bossEnraged = false;
 
-    [Header("Screens")]
-    public GameObject gameOverPanel;
-    public GameObject victoryPanel;
-
-    [Header("Colors")]
-    public Color bossBarColor      = new Color(0.85f, 0.15f, 0.1f);
-    public Color bossBarLowColor   = new Color(1f,    0.55f, 0.05f); // orange at low HP
-    public Color bossBarRageColor  = new Color(1f,    0.1f,  0.6f);  // purple-pink rage
-    public Color playerBarColor    = new Color(0.2f,  0.75f, 0.3f);
-    public Color playerBarLowColor = new Color(0.9f,  0.2f,  0.1f);  // red when low
-    public Color barBgColor        = new Color(0.12f, 0.1f,  0.08f);
-    public Color ghostBarColor     = new Color(1f,    1f,    1f,    0.4f);
-
-    // damage number pool
-    private Transform dmgNumberParent;
+    private GameObject   gameOverPanel;
+    private GameObject   victoryPanel;
+    private RectTransform dmgParent;
 
     void Awake()
     {
@@ -43,165 +30,137 @@ public class UIManager : MonoBehaviour
 
     void Start()
     {
-        CombatManager.Instance.OnPlayerDeath  += () => StartCoroutine(ShowPanelDelayed(gameOverPanel, 1.2f));
-        CombatManager.Instance.OnBossDefeated += () => StartCoroutine(ShowPanelDelayed(victoryPanel,  1.8f));
+        var pc = FindAnyObjectByType<PlayerController>();
+        if (pc != null) playerMax = pc.maxHealth;
 
-        // boss rage — change bar color
-        BossController boss = FindAnyObjectByType<BossController>();
-        if (boss != null)
-            boss.OnRageEntered.AddListener(OnBossRage);
+        var bc = FindAnyObjectByType<BossController>();
+        if (bc != null) bossMax = bc.maxHealth;
 
-        if (gameOverPanel != null) gameOverPanel.SetActive(false);
-        if (victoryPanel  != null) victoryPanel.SetActive(false);
+        CombatManager.Instance.OnPlayerDeath  += () => StartCoroutine(ShowPanel(gameOverPanel, 1.1f));
+        CombatManager.Instance.OnBossDefeated += () => StartCoroutine(ShowPanel(victoryPanel,  1.8f));
     }
 
     void Update()
     {
-        // smooth fill animation
-        if (bossHealthFill != null)
+        if (playerFill != null)
         {
-            bossHealthFill.fillAmount = Mathf.Lerp(
-                bossHealthFill.fillAmount, bossTargetFill, Time.deltaTime * 8f);
+            playerFill.fillAmount = Mathf.Lerp(
+                playerFill.fillAmount, playerTarget, Time.deltaTime * 10f);
 
-            // ghost bar lags further behind — damage chunk visible
-            bossGhostFill_val = Mathf.Lerp(bossGhostFill_val, bossTargetFill, Time.deltaTime * 2f);
-            if (bossGhostFill != null) bossGhostFill.fillAmount = bossGhostFill_val;
+            float pct = playerFill.fillAmount;
+            playerFill.color = (pct < 0.3f)
+                ? Color.Lerp(
+                    new Color(0.95f, 0.18f, 0.1f),
+                    new Color(1f, 0.5f, 0.4f),
+                    (Mathf.Sin(Time.time * 5f) + 1f) * 0.5f)
+                : Color.Lerp(
+                    new Color(0.95f, 0.18f, 0.1f),
+                    new Color(0.18f, 0.78f, 0.28f),
+                    Mathf.Clamp01((pct - 0.2f) / 0.5f));
 
-            // low health color shift
-            float bt = bossHealthFill.fillAmount;
-            if (!isBossEnraged)
-                bossHealthFill.color = Color.Lerp(bossBarLowColor, bossBarColor, Mathf.Clamp01((bt - 0.2f) / 0.4f));
+            if (playerHPText != null)
+                playerHPText.text =
+                    $"{Mathf.CeilToInt(playerTarget * playerMax)}  /  {(int)playerMax}";
         }
 
-        if (playerHealthFill != null)
+        if (bossFill != null)
         {
-            playerHealthFill.fillAmount = Mathf.Lerp(
-                playerHealthFill.fillAmount, playerTargetFill, Time.deltaTime * 8f);
+            bossFill.fillAmount = Mathf.Lerp(
+                bossFill.fillAmount, bossTarget, Time.deltaTime * 10f);
 
-            playerGhostFill_val = Mathf.Lerp(playerGhostFill_val, playerTargetFill, Time.deltaTime * 2f);
-            if (playerGhostFill != null) playerGhostFill.fillAmount = playerGhostFill_val;
+            if (!bossEnraged)
+                bossFill.color = Color.Lerp(
+                    new Color(1f, 0.45f, 0.05f),
+                    new Color(0.85f, 0.14f, 0.1f),
+                    Mathf.Clamp01((bossFill.fillAmount - 0.15f) / 0.35f));
 
-            // pulse red when below 30%
-            float pt = playerHealthFill.fillAmount;
-            if (pt < 0.3f)
-            {
-                float pulse = (Mathf.Sin(Time.time * 4f) + 1f) / 2f;
-                playerHealthFill.color = Color.Lerp(playerBarLowColor, new Color(1f, 0.5f, 0.4f), pulse);
-            }
-            else
-            {
-                playerHealthFill.color = Color.Lerp(playerBarLowColor, playerBarColor,
-                    Mathf.Clamp01((pt - 0.2f) / 0.4f));
-            }
+            if (bossHPText != null)
+                bossHPText.text =
+                    $"{Mathf.CeilToInt(bossTarget * bossMax)}  /  {(int)bossMax}";
         }
     }
 
-    // ---- public API ----
-
-    public void UpdateBossHealth(float normalized)
-    {
-        bossTargetFill = normalized;
-    }
 
     public void UpdatePlayerHealth(float normalized)
     {
-        playerTargetFill = normalized;
-        // snap ghost immediately on first hit if full
-        if (normalized >= 0.99f) playerGhostFill_val = 1f;
+        playerTarget = Mathf.Clamp01(normalized);
     }
 
-    public void SpawnDamageNumber(float damage, Vector3 worldPos, bool isBoss)
+    public void UpdateBossHealth(float normalized)
     {
-        if (dmgNumberParent == null) return;
+        bossTarget = Mathf.Clamp01(normalized);
+    }
 
-        GameObject go = new GameObject("DmgNum");
-        go.transform.SetParent(dmgNumberParent, false);
+    public void TriggerBossRage()
+    {
+        bossEnraged = true;
+        if (bossFill != null) bossFill.color = new Color(0.88f, 0.08f, 0.72f);
+        StartCoroutine(RageFlash());
+    }
 
-        // convert world to screen to canvas
-        Camera cam = Camera.main;
-        Vector2 screenPos = cam.WorldToScreenPoint(worldPos);
-        RectTransform canvasRect = dmgNumberParent.GetComponent<RectTransform>();
+    public void SpawnDamageNumber(float dmg, Vector3 worldPos, bool onBoss)
+    {
+        if (dmgParent == null) return;
+
+        Vector2 screen = Camera.main.WorldToScreenPoint(worldPos);
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            canvasRect, screenPos, null, out Vector2 localPos);
+            dmgParent, screen, null, out Vector2 local);
+
+        GameObject go = new GameObject("Dmg");
+        go.transform.SetParent(dmgParent, false);
 
         RectTransform rt = go.AddComponent<RectTransform>();
-        rt.anchoredPosition = localPos;
+        rt.anchoredPosition = local;
         rt.sizeDelta = new Vector2(120, 50);
 
-        Text txt = go.AddComponent<Text>();
-        txt.text      = isBoss ? $"-{(int)damage}" : $"-{(int)damage}";
-        txt.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        txt.fontSize  = isBoss ? 38 : 32;
-        txt.fontStyle = FontStyle.Bold;
-        txt.color     = isBoss
-            ? new Color(1f, 0.85f, 0.2f)   // gold for boss damage
-            : new Color(1f, 0.2f, 0.1f);   // red for player damage
-        txt.alignment = TextAnchor.MiddleCenter;
+        Text t = go.AddComponent<Text>();
+        t.text      = $"-{(int)dmg}";
+        t.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        t.fontSize  = onBoss ? 40 : 32;
+        t.fontStyle = FontStyle.Bold;
+        t.color     = onBoss
+            ? new Color(1f, 0.88f, 0.2f)
+            : new Color(1f, 0.2f, 0.1f);
+        t.alignment = TextAnchor.MiddleCenter;
+        go.AddComponent<Outline>().effectColor = Color.black;
 
-        Outline ol = go.AddComponent<Outline>();
-        ol.effectColor    = Color.black;
-        ol.effectDistance = new Vector2(2, -2);
-
-        StartCoroutine(AnimateDamageNumber(rt, txt));
+        StartCoroutine(FloatNumber(rt, t));
     }
 
-    IEnumerator AnimateDamageNumber(RectTransform rt, Text txt)
+    IEnumerator FloatNumber(RectTransform rt, Text t)
     {
-        float t = 0f;
-        Vector2 startPos = rt.anchoredPosition;
-        while (t < 0.9f)
+        Vector2 start = rt.anchoredPosition;
+        float e = 0f;
+        while (e < 0.9f)
         {
-            t += Time.deltaTime;
-            // float upward
-            rt.anchoredPosition = startPos + Vector2.up * t * 60f;
-            // fade out in second half
-            Color c = txt.color;
-            c.a = Mathf.Clamp01(1f - (t - 0.4f) / 0.5f);
-            txt.color = c;
+            e += Time.deltaTime;
+            rt.anchoredPosition = start + Vector2.up * e * 65f;
+            Color c = t.color;
+            c.a = 1f - Mathf.Clamp01((e - 0.4f) / 0.5f);
+            t.color = c;
             yield return null;
         }
         Destroy(rt.gameObject);
     }
 
-    // ---- rage ----
-
-    private bool isBossEnraged = false;
-
-    void OnBossRage()
-    {
-        isBossEnraged = true;
-        if (bossHealthFill != null)
-            bossHealthFill.color = bossBarRageColor;
-        if (bossGhostFill != null)
-            bossGhostFill.color = new Color(bossBarRageColor.r, bossBarRageColor.g, bossBarRageColor.b, 0.3f);
-
-        // flash the boss bar
-        StartCoroutine(RageBarFlash());
-    }
-
-    IEnumerator RageBarFlash()
+    IEnumerator RageFlash()
     {
         for (int i = 0; i < 6; i++)
         {
-            if (bossHealthFill != null)
-                bossHealthFill.color = Color.white;
+            if (bossFill) bossFill.color = Color.white;
             yield return new WaitForSeconds(0.07f);
-            if (bossHealthFill != null)
-                bossHealthFill.color = bossBarRageColor;
+            if (bossFill) bossFill.color = new Color(0.88f, 0.08f, 0.72f);
             yield return new WaitForSeconds(0.07f);
         }
     }
 
-    // ---- end screens ----
-
-    IEnumerator ShowPanelDelayed(GameObject panel, float delay)
+    IEnumerator ShowPanel(GameObject panel, float delay)
     {
-        yield return new WaitForSeconds(delay);
         if (panel == null) yield break;
-
+        yield return new WaitForSeconds(delay);
         panel.SetActive(true);
 
-        // fade in
+        // fade background in
         Image bg = panel.GetComponent<Image>();
         if (bg != null)
         {
@@ -210,15 +169,14 @@ public class UIManager : MonoBehaviour
             float t = 0f;
             while (t < 1f)
             {
-                t += Time.deltaTime * 1.5f;
-                bg.color = new Color(target.r, target.g, target.b, Mathf.Clamp01(t) * target.a);
+                t += Time.deltaTime * 2f;
+                bg.color = new Color(target.r, target.g, target.b,
+                    Mathf.Clamp01(t) * target.a);
                 yield return null;
             }
         }
 
-        // text children pop in one by one
-        Text[] texts = panel.GetComponentsInChildren<Text>();
-        foreach (Text tx in texts)
+        foreach (Text tx in panel.GetComponentsInChildren<Text>())
         {
             Color tc = tx.color;
             tx.color = new Color(tc.r, tc.g, tc.b, 0f);
@@ -229,191 +187,186 @@ public class UIManager : MonoBehaviour
                 tx.color = new Color(tc.r, tc.g, tc.b, Mathf.Clamp01(t));
                 yield return null;
             }
-            yield return new WaitForSeconds(0.1f);
+            yield return new WaitForSeconds(0.08f);
         }
     }
 
-    // ---- programmatic UI creation (called by GameBootstrap) ----
 
     public static UIManager CreateUI()
     {
-        GameObject canvasGO = new GameObject("CombatCanvas");
-        Canvas canvas = canvasGO.AddComponent<Canvas>();
-        canvas.renderMode  = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 100;
+        GameObject cgo  = new GameObject("CombatCanvas");
+        Canvas     cv   = cgo.AddComponent<Canvas>();
+        cv.renderMode   = RenderMode.ScreenSpaceOverlay;
+        cv.sortingOrder = 100;
 
-        CanvasScaler scaler = canvasGO.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode        = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920, 1080);
+        CanvasScaler cs        = cgo.AddComponent<CanvasScaler>();
+        cs.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        cs.referenceResolution = new Vector2(1920, 1080);
+        cgo.AddComponent<GraphicRaycaster>();
 
-        canvasGO.AddComponent<GraphicRaycaster>();
+        UIManager     ui   = cgo.AddComponent<UIManager>();
+        RectTransform root = cgo.GetComponent<RectTransform>();
 
-        UIManager ui = canvasGO.AddComponent<UIManager>();
-        RectTransform canvasRect = canvasGO.GetComponent<RectTransform>();
+        BuildBar(root, "Player",
+            new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f),
+            new Vector2(24f, 24f), new Vector2(340f, 68f),
+            new Color(0.18f, 0.78f, 0.28f), "YOU",
+            out ui.playerFill, out ui.playerHPText);
 
-        // boss health bar (top)
-        ui.bossHealthFill = CreateHealthBar(canvasRect, "BossHP",
-            new Vector2(0f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(60, -50), new Vector2(-60, -20),
-            ui.bossBarColor, ui.barBgColor, "BOSS",
-            out ui.bossGhostFill);
+        BuildBar(root, "Boss",
+            new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
+            new Vector2(-24f, -24f), new Vector2(340f, 68f),
+            new Color(0.85f, 0.14f, 0.1f), "BOSS",
+            out ui.bossFill, out ui.bossHPText);
 
-        // player health bar (bottom)
-        ui.playerHealthFill = CreateHealthBar(canvasRect, "PlayerHP",
-            new Vector2(0f, 0f), new Vector2(0.5f, 0f),
-            new Vector2(60, 20), new Vector2(-60, 55),
-            ui.playerBarColor, ui.barBgColor, "YOU",
-            out ui.playerGhostFill);
+        cgo.AddComponent<RhythmLaneManager>().Initialize(root);
 
-        // rhythm lanes
-        RhythmLaneManager lanes = canvasGO.AddComponent<RhythmLaneManager>();
-        lanes.Initialize(canvasRect);
+        GameObject dmgGO = new GameObject("DmgNumbers");
+        dmgGO.transform.SetParent(cgo.transform, false);
+        ui.dmgParent = dmgGO.AddComponent<RectTransform>();
+        ui.dmgParent.anchorMin = Vector2.zero;
+        ui.dmgParent.anchorMax = Vector2.one;
+        ui.dmgParent.offsetMin = ui.dmgParent.offsetMax = Vector2.zero;
 
-        // damage number parent (above lanes, below panels)
-        GameObject dmgParent = new GameObject("DamageNumbers");
-        dmgParent.transform.SetParent(canvasGO.transform, false);
-        RectTransform dmgRT = dmgParent.AddComponent<RectTransform>();
-        dmgRT.anchorMin = Vector2.zero;
-        dmgRT.anchorMax = Vector2.one;
-        dmgRT.offsetMin = Vector2.zero;
-        dmgRT.offsetMax = Vector2.zero;
-        ui.dmgNumberParent = dmgParent.transform;
+        ui.gameOverPanel = MakePanel(root,
+            "YOU DIED",
+            new Color(0.85f, 0.05f, 0.05f),
+            new Color(0f, 0f, 0f, 0.9f),
+            "Press  R  to restart");
 
-        // game over / victory panels
-        ui.gameOverPanel = CreateOverlayPanel(canvasRect, "GameOverPanel",
-            "YOU DIED", new Color(0.7f, 0.05f, 0.05f), new Color(0, 0, 0, 0.88f));
-
-        ui.victoryPanel = CreateOverlayPanel(canvasRect, "VictoryPanel",
-            "HEIR OF FIRE DESTROYED", new Color(1f, 0.85f, 0.2f), new Color(0, 0, 0, 0.88f));
+        ui.victoryPanel = MakePanel(root,
+            "HEIR OF FIRE DESTROYED",
+            new Color(1f, 0.85f, 0.2f),
+            new Color(0f, 0f, 0f, 0.9f),
+            "Press  R  to restart");
 
         return ui;
     }
 
-    // ---- helpers ----
 
-    static Image CreateHealthBar(RectTransform parent, string name,
-        Vector2 anchor, Vector2 pivot,
-        Vector2 offsetMin, Vector2 offsetMax,
-        Color fillColor, Color bgColor, string label,
-        out Image ghostFill)
+    static void BuildBar(
+        RectTransform root, string id,
+        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
+        Vector2 anchoredPos, Vector2 size,
+        Color fillColor, string label,
+        out Image fill, out Text hpText)
     {
-        // background
-        GameObject bg = new GameObject(name + "_BG");
-        bg.transform.SetParent(parent, false);
+        GameObject panel = new GameObject($"{id}HP");
+        panel.transform.SetParent(root, false);
 
-        RectTransform bgRect = bg.AddComponent<RectTransform>();
-        bgRect.anchorMin = new Vector2(0, anchor.y);
-        bgRect.anchorMax = new Vector2(1, anchor.y);
-        bgRect.pivot     = pivot;
-        bgRect.offsetMin = offsetMin;
-        bgRect.offsetMax = offsetMax;
+        RectTransform pRT    = panel.AddComponent<RectTransform>();
+        pRT.anchorMin        = anchorMin;
+        pRT.anchorMax        = anchorMax;
+        pRT.pivot            = pivot;
+        pRT.anchoredPosition = anchoredPos;
+        pRT.sizeDelta        = size;
+        panel.AddComponent<Image>().color = new Color(0.05f, 0.05f, 0.05f, 0.93f);
 
-        Image bgImage = bg.AddComponent<Image>();
-        bgImage.color = bgColor;
+        hpText = null; 
+        Text lt = MakeChildText(panel.transform, "Label", label, 18, FontStyle.Bold,
+            new Color(0.88f, 0.82f, 0.72f),
+            new Vector2(0f, 0.52f), new Vector2(0.55f, 1f),
+            new Vector2(10f, 2f),   new Vector2(0f, -2f),
+            TextAnchor.MiddleLeft);
 
-        // ghost fill (white, behind main fill — shows damage chunk)
-        GameObject ghost = new GameObject(name + "_Ghost");
-        ghost.transform.SetParent(bg.transform, false);
-        RectTransform ghostRT = ghost.AddComponent<RectTransform>();
-        ghostRT.anchorMin = Vector2.zero;
-        ghostRT.anchorMax = Vector2.one;
-        ghostRT.offsetMin = new Vector2(4, 4);
-        ghostRT.offsetMax = new Vector2(-4, -4);
-        ghostFill = ghost.AddComponent<Image>();
-        ghostFill.color      = new Color(1f, 1f, 1f, 0.4f);
-        ghostFill.type       = Image.Type.Filled;
-        ghostFill.fillMethod = Image.FillMethod.Horizontal;
-        ghostFill.fillAmount = 1f;
+        hpText = MakeChildText(panel.transform, "HPNum", "", 15, FontStyle.Normal,
+            new Color(0.72f, 0.68f, 0.6f),
+            new Vector2(0.45f, 0.52f), new Vector2(1f, 1f),
+            new Vector2(0f, 2f),       new Vector2(-10f, -2f),
+            TextAnchor.MiddleRight);
 
-        // main fill (on top of ghost)
-        GameObject fill = new GameObject(name + "_Fill");
-        fill.transform.SetParent(bg.transform, false);
-        RectTransform fillRect = fill.AddComponent<RectTransform>();
-        fillRect.anchorMin = Vector2.zero;
-        fillRect.anchorMax = Vector2.one;
-        fillRect.offsetMin = new Vector2(4, 4);
-        fillRect.offsetMax = new Vector2(-4, -4);
+        GameObject track = new GameObject("Track");
+        track.transform.SetParent(panel.transform, false);
+        RectTransform tRT = track.AddComponent<RectTransform>();
+        tRT.anchorMin = new Vector2(0f, 0f);
+        tRT.anchorMax = new Vector2(1f, 0.50f);
+        tRT.offsetMin = new Vector2(8f, 5f);
+        tRT.offsetMax = new Vector2(-8f, 0f);
+        track.AddComponent<Image>().color = new Color(0.03f, 0.03f, 0.03f, 1f);
 
-        Image fillImage = fill.AddComponent<Image>();
-        fillImage.color      = fillColor;
-        fillImage.type       = Image.Type.Filled;
-        fillImage.fillMethod = Image.FillMethod.Horizontal;
-        fillImage.fillAmount = 1f;
-
-        // label
-        GameObject labelGO = new GameObject(name + "_Label");
-        labelGO.transform.SetParent(bg.transform, false);
-        RectTransform labelRect = labelGO.AddComponent<RectTransform>();
-        labelRect.anchorMin = Vector2.zero;
-        labelRect.anchorMax = Vector2.one;
-        labelRect.offsetMin = new Vector2(10, 0);
-        labelRect.offsetMax = new Vector2(-10, 0);
-
-        Text labelText = labelGO.AddComponent<Text>();
-        labelText.text      = label;
-        labelText.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        labelText.fontSize  = 18;
-        labelText.fontStyle = FontStyle.Bold;
-        labelText.color     = new Color(0.9f, 0.85f, 0.75f);
-        labelText.alignment = TextAnchor.MiddleLeft;
-
-        Outline outline = labelGO.AddComponent<Outline>();
-        outline.effectColor    = Color.black;
-        outline.effectDistance = new Vector2(1, -1);
-
-        return fillImage;
+        GameObject fgo = new GameObject("Fill");
+        fgo.transform.SetParent(track.transform, false);
+        RectTransform fRT = fgo.AddComponent<RectTransform>();
+        fRT.anchorMin = Vector2.zero;
+        fRT.anchorMax = Vector2.one;
+        fRT.offsetMin = new Vector2(2f, 2f);
+        fRT.offsetMax = new Vector2(-2f, -2f);
+        fill = fgo.AddComponent<Image>();
+        fill.color      = fillColor;
+        fill.type       = Image.Type.Filled;
+        fill.fillMethod = Image.FillMethod.Horizontal;
+        fill.fillAmount = 1f;
     }
 
-    static Text CreateText(Transform parent, string name, Vector2 anchorPos,
-        int fontSize, FontStyle style, Color color)
+    static Text MakeChildText(Transform parent, string name, string text,
+        int fontSize, FontStyle style, Color color,
+        Vector2 anchorMin, Vector2 anchorMax,
+        Vector2 offsetMin, Vector2 offsetMax,
+        TextAnchor alignment)
     {
         GameObject go = new GameObject(name);
         go.transform.SetParent(parent, false);
 
-        RectTransform rect = go.AddComponent<RectTransform>();
-        rect.anchorMin = anchorPos;
-        rect.anchorMax = anchorPos;
-        rect.pivot     = new Vector2(0.5f, 0.5f);
-        rect.sizeDelta = new Vector2(800, 80);
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.offsetMin = offsetMin;
+        rt.offsetMax = offsetMax;
 
-        Text text = go.AddComponent<Text>();
-        text.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        text.fontSize  = fontSize;
-        text.fontStyle = style;
-        text.color     = color;
-        text.alignment = TextAnchor.MiddleCenter;
-
-        Outline outline = go.AddComponent<Outline>();
-        outline.effectColor    = Color.black;
-        outline.effectDistance = new Vector2(2, -2);
-
-        return text;
+        Text t = go.AddComponent<Text>();
+        t.text      = text;
+        t.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        t.fontSize  = fontSize;
+        t.fontStyle = style;
+        t.color     = color;
+        t.alignment = alignment;
+        go.AddComponent<Outline>().effectColor = Color.black;
+        return t;
     }
 
-    static GameObject CreateOverlayPanel(RectTransform parent, string name,
-        string message, Color textColor, Color bgColor)
+
+    static GameObject MakePanel(RectTransform root,
+        string mainMsg, Color mainColor, Color bgColor, string subMsg)
     {
-        GameObject panel = new GameObject(name);
-        panel.transform.SetParent(parent, false);
+        GameObject p = new GameObject(mainMsg.Replace(" ", "") + "Panel");
+        p.transform.SetParent(root, false);
 
-        RectTransform rect = panel.AddComponent<RectTransform>();
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
+        RectTransform rt = p.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+        p.AddComponent<Image>().color = bgColor;
 
-        Image bg = panel.AddComponent<Image>();
-        bg.color = bgColor;
+        MakeCenteredText(p.transform, "Title",  mainMsg, 72, FontStyle.Bold,   mainColor,                        new Vector2(0f,  40f), new Vector2(1000f, 110f));
+        MakeCenteredText(p.transform, "Sub",    subMsg,  30, FontStyle.Normal, new Color(0.72f, 0.67f, 0.57f),   new Vector2(0f, -35f), new Vector2(700f,  60f));
 
-        Text text = CreateText(panel.transform, name + "_Text",
-            new Vector2(0.5f, 0.55f), 72, FontStyle.Bold, textColor);
-        text.text = message;
+        p.SetActive(false);
+        return p;
+    }
 
-        Text sub = CreateText(panel.transform, name + "_Sub",
-            new Vector2(0.5f, 0.4f), 28, FontStyle.Normal, new Color(0.7f, 0.65f, 0.55f));
-        sub.text = "Press R to restart";
+    static void MakeCenteredText(Transform parent, string name, string msg,
+        int size, FontStyle style, Color color, Vector2 offset, Vector2 sizeDelta)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
 
-        panel.SetActive(false);
-        return panel;
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin        = new Vector2(0.5f, 0.5f);
+        rt.anchorMax        = new Vector2(0.5f, 0.5f);
+        rt.pivot            = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = offset;
+        rt.sizeDelta        = sizeDelta;
+
+        Text t = go.AddComponent<Text>();
+        t.text      = msg;
+        t.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        t.fontSize  = size;
+        t.fontStyle = style;
+        t.color     = color;
+        t.alignment = TextAnchor.MiddleCenter;
+
+        Outline ol = go.AddComponent<Outline>();
+        ol.effectColor    = Color.black;
+        ol.effectDistance = new Vector2(2, -2);
     }
 }
